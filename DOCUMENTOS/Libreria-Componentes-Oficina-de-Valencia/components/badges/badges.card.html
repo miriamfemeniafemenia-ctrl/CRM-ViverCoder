@@ -1,0 +1,41 @@
+<!-- @dsCard group="Components" viewport="700x290" name="Status Badges" subtitle="Sale-pipeline (4), claim (3) and priority (3) status pills" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:var(--surface-card);padding:20px}</style>
+<div id="root"></div>
+<script type="text/babel">
+const { StatusBadge } = window.OFICINADEVALENCIA_a871c7;
+function Demo(){
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>Pipeline de ventas</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <StatusBadge domain="sale" status="interesado" />
+        <StatusBadge domain="sale" status="presupuesto" />
+        <StatusBadge domain="sale" status="cerrado" />
+        <StatusBadge domain="sale" status="perdido" />
+      </div>
+    </div>
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>Siniestros</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <StatusBadge domain="claim" status="abierto" />
+        <StatusBadge domain="claim" status="tramitacion" />
+        <StatusBadge domain="claim" status="resuelto" />
+      </div>
+    </div>
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>Prioridad de cliente</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <StatusBadge domain="priority" status="alta" />
+        <StatusBadge domain="priority" status="media" />
+        <StatusBadge domain="priority" status="baja" />
+      </div>
+    </div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo/>);
+</script>

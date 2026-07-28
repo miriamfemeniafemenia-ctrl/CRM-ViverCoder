@@ -1,0 +1,46 @@
+<!-- @dsCard group="Pantallas" viewport="390x760" name="F6 — Alertas de renovación" subtitle="P1 Mis tareas de hoy, con recordatorios automáticos de renovación de póliza" -->
+<link rel="stylesheet" href="../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../_ds_bundle.js"></script>
+<style>html,body{margin:0;height:100%;font-family:var(--font-sans);background:var(--surface-app)}</style>
+<div id="root" style="height:760px;overflow:hidden"></div>
+<script type="text/babel">
+const { Tabs, ReminderItem, MainNav } = window.OFICINADEVALENCIA_a871c7;
+
+function Demo(){
+  const [tab, setTab] = React.useState("hoy");
+  const [reminders, setReminders] = React.useState([
+    { id: 1, clientName: "Manuel Ortiz", date: "20 jul", assignedTo: "Antonio", note: "Renovación: seguro de hogar vence en 7 días (29 jul).", overdue: true, done: false },
+    { id: 2, clientName: "Laura Gómez", date: "22 jul", assignedTo: "Mónica", note: "Renovación: seguro de auto vence en 15 días (06 ago).", overdue: false, done: false },
+    { id: 3, clientName: "Javier Ruiz", date: "22 jul", assignedTo: "Antonio", note: "Llamar para confirmar visita al taller.", overdue: false, done: false },
+    { id: 4, clientName: "Carmen Soler", date: "23 jul", assignedTo: "Mónica", note: "Renovación: seguro de vida vence en 30 días (21 ago).", overdue: false, done: false },
+  ]);
+
+  const toggleDone = id => setReminders(rs => rs.map(r => r.id === id ? { ...r, done: !r.done } : r));
+  const pending = reminders.filter(r => !r.done).length;
+
+  return <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+    <div style={{padding:"var(--space-5) var(--space-4) 0"}}>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:4}}>F6 — Alertas de renovación (F3 debe estar implementada)</div>
+      <h1 style={{margin:"0 0 var(--space-4)",font:"var(--text-title)",color:"var(--text-primary)"}}>Mis tareas de hoy</h1>
+      <Tabs items={[{key:"hoy",label:"Hoy",count:pending},{key:"proximas",label:"Próximas"}]} active={tab} onChange={setTab} />
+    </div>
+    <div style={{flex:1,overflowY:"auto",padding:"var(--space-4)",display:"flex",flexDirection:"column",gap:8}}>
+      {tab === "hoy" ? reminders.map(r => (
+        <ReminderItem key={r.id} clientName={r.clientName} date={r.date} note={r.note} assignedTo={r.assignedTo}
+          overdue={r.overdue} done={r.done}
+          onClick={() => console.log("open client", r.id)}
+          onComplete={() => toggleDone(r.id)}
+          onEdit={() => console.log("edit", r.id)}
+          onDelete={() => setReminders(rs => rs.filter(x => x.id !== r.id))} />
+      )) : (
+        <p style={{margin:"var(--space-6) 0",textAlign:"center",font:"var(--text-body)",color:"var(--text-tertiary)"}}>No hay recordatorios próximos.</p>
+      )}
+    </div>
+    <MainNav mode="mobile" active="tasks" counts={{ tasks: pending }} onNavigate={k => console.log("nav", k)} />
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo/>);
+</script>

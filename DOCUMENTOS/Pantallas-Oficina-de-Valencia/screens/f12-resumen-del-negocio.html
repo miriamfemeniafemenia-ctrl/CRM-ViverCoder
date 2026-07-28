@@ -1,0 +1,52 @@
+<!-- @dsCard group="Pantallas" viewport="1280x832" name="F12 — Resumen del negocio" subtitle="Dashboard ejecutivo para Miriam — vistazo de 30 segundos" -->
+<link rel="stylesheet" href="../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../_ds_bundle.js"></script>
+<style>html,body{margin:0;height:100%;font-family:var(--font-sans);background:var(--surface-app)}</style>
+<div id="root" style="height:832px;overflow:hidden"></div>
+<script type="text/babel">
+const { MainNav, StatTile, SectionCard } = window.OFICINADEVALENCIA_a871c7;
+
+function TeamRow({ name, count, last }) {
+  return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"var(--space-2) 0",borderBottom: last ? "none" : "1px solid var(--border-default)"}}>
+    <span style={{font:"var(--text-body)",color:"var(--text-primary)"}}>{name}</span>
+    <span style={{
+      display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:24,height:24,paddingInline:8,
+      borderRadius:"var(--radius-pill)",background: count > 0 ? "var(--color-primary-50)" : "var(--color-neutral-100)",
+      color: count > 0 ? "var(--color-primary-700)" : "var(--text-tertiary)",font:"var(--text-micro)",fontWeight:700,
+    }}>{count}</span>
+  </div>;
+}
+
+function Demo(){
+  const team = [
+    { name: "Mónica", count: 5 },
+    { name: "Antonio", count: 3 },
+    { name: "Miriam", count: 1 },
+  ];
+  return <div style={{display:"flex",height:"100%"}}>
+    <MainNav mode="desktop" active="summary" onNavigate={k => console.log("nav", k)} />
+    <div style={{flex:1,overflowY:"auto",padding:"var(--space-6)",boxSizing:"border-box"}}>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:4}}>F12 — Resumen del negocio (T9, T11)</div>
+      <h1 style={{margin:"0 0 var(--space-1)",font:"var(--text-display)",color:"var(--text-primary)"}}>Resumen del negocio</h1>
+      <p style={{margin:"0 0 var(--space-6)",font:"var(--text-body)",color:"var(--text-secondary)"}}>Miriam · estado general en un vistazo</p>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:"var(--space-4)",marginBottom:"var(--space-6)"}}>
+        <StatTile label="Clientes activos" value={128} />
+        <StatTile label="Ventas cerradas" value={9} caption="este mes" />
+        <StatTile label="Clientes nuevos" value={14} caption="este mes" />
+        <StatTile label="Leads en proceso" value={22} caption="interesado + presupuesto enviado" />
+      </div>
+
+      <div style={{maxWidth:420}}>
+        <SectionCard title="Tareas pendientes del equipo">
+          {team.map((t, i) => <TeamRow key={t.name} name={t.name} count={t.count} last={i === team.length - 1} />)}
+        </SectionCard>
+      </div>
+    </div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo/>);
+</script>

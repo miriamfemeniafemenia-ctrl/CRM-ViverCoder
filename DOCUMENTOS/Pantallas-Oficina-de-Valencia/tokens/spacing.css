@@ -1,0 +1,68 @@
+/* ============================================================
+   OFICINA DE VALENCIA — SPACING, RADIUS, SIZE TOKENS
+   Base-4 scale. Layout density is desktop-first (compact row/
+   control heights so tables of clientes/siniestros show more
+   rows per screen) — but touch targets are NOT: ARC-36 (Linear)
+   is explicit that Mónica/Antonio use this one-handed, in the
+   field, on mobile, daily. --tap-target-min is therefore
+   breakpoint-driven below (44px under --breakpoint-desktop,
+   36px at/above it) — full touch size on mobile, compact on
+   desktop mouse/trackpad use. See readme.md "Reconciliación
+   con ARC-36/ARC-37" for the full reasoning (2026-07-19).
+   Radius is mixed on purpose: small/precise (8px) on cards and
+   inputs for a "technical, engineered" read; full pill reserved
+   for badges and the primary action button only — never used
+   indiscriminately, so it keeps its meaning as an "action" signal.
+   ============================================================ */
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Layout */
+  --breakpoint-desktop: 768px;
+  --content-max-width: 1360px;
+  --page-margin-mobile: var(--space-4);
+  --page-margin-desktop: var(--space-6);
+
+  /* Standalone / PWA safe areas */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Fixed nav / structural sizes */
+  --bottom-nav-height: 60px;
+  --side-nav-width: 232px;
+  --header-height: 52px;
+  --table-row-height: 40px;
+
+  /* Radii — small & precise by default; pill is reserved (badges, primary CTA) */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Touch/click target — mobile/touch default per ARC-36 (one-handed,
+     in the field); primary actions already clear 40px regardless. */
+  --tap-target-min: 44px;
+}
+
+/* Desktop/mouse: tighten back to the compact-density value.
+   768px is duplicated from --breakpoint-desktop above — CSS custom
+   properties can't be read inside a media query condition, so keep
+   these two values in sync by hand if the breakpoint ever changes. */
+@media (min-width: 768px) {
+  :root {
+    --tap-target-min: 36px;
+  }
+}

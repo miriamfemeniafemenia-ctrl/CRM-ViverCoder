@@ -1,0 +1,99 @@
+<!-- @dsCard group="Components" viewport="760x900" name="List Items" subtitle="ClientRow, ClaimRow, PolicyRow, ReminderItem, ContactHistoryItem, AffectedPartyRow, SortToggle" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:var(--surface-app);padding:20px}</style>
+<div id="root"></div>
+<script type="text/babel">
+const { ClientRow, ClaimRow, PolicyRow, ReminderItem, ContactHistoryItem, AffectedPartyRow, SectionCard, SortToggle } = window.OFICINADEVALENCIA_a871c7;
+
+function Demo(){
+  const [reminders, setReminders] = React.useState([
+    { id: 1, clientName: "Laura Gómez", date: "15 jul", assignedTo: "Mónica", note: "Llamar para confirmar el presupuesto de hogar.", overdue: true, done: false },
+    { id: 2, clientName: "Javier Ruiz", date: "17 jul", assignedTo: "Antonio", note: "Enviar comparativa de pólizas de auto.", overdue: false, done: false },
+    { id: 3, clientName: "Carmen Soler", date: "12 jul", assignedTo: "Mónica", note: "Recordar renovación de seguro de vida.", overdue: false, done: true },
+  ]);
+  const [sortDir, setSortDir] = React.useState(null);
+  const [parties, setParties] = React.useState([
+    { id: 1, name: "Manuel Ortiz", phone: "600 123 456", email: "manuel@correo.com" },
+    { id: 2, name: "Ana Beltrán", phone: "611 987 654" },
+  ]);
+
+  const toggleDone = id => setReminders(rs => rs.map(r => r.id === id ? { ...r, done: !r.done } : r));
+
+  return <div style={{display:"flex",flexDirection:"column",gap:24,maxWidth:720}}>
+
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>P1 — Mis tareas de hoy (ReminderItem, con assignedTo para una vista combinada)</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {reminders.map(r => (
+          <ReminderItem key={r.id} clientName={r.clientName} date={r.date} note={r.note} assignedTo={r.assignedTo}
+            overdue={r.overdue} done={r.done}
+            onClick={() => console.log("open client", r.id)}
+            onComplete={() => toggleDone(r.id)}
+            onEdit={() => console.log("edit", r.id)}
+            onDelete={() => setReminders(rs => rs.filter(x => x.id !== r.id))} />
+        ))}
+      </div>
+    </div>
+
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)"}}>P2 — Lista de clientes (ClientRow)</div>
+        <SortToggle label="Prioridad" direction={sortDir} onToggle={() => setSortDir(d => d === "desc" ? "asc" : d === "asc" ? null : "desc")} />
+      </div>
+      <SectionCard>
+        <ClientRow name="Laura Gómez" saleStatus="presupuesto" onClick={() => console.log("open")} />
+        <ClientRow name="Javier Ruiz" saleStatus="interesado" onClick={() => console.log("open")} />
+        <ClientRow name="Carmen Soler" saleStatus="cerrado" onClick={() => console.log("open")} />
+        <ClientRow name="Manuel Ortiz" saleStatus="perdido" divider={false} onClick={() => console.log("open")} />
+      </SectionCard>
+    </div>
+
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>P3 — Pólizas contratadas (PolicyRow)</div>
+      <SectionCard>
+        <PolicyRow policyType="Seguro de auto" insurer="Mapfre" policyNumber="A-88291" policyStatus="activa" onClick={() => console.log("open policy")} />
+        <PolicyRow policyType="Seguro de hogar" insurer="Allianz" policyNumber="H-10432" policyStatus="anulada" divider={false} onClick={() => console.log("open policy")} />
+      </SectionCard>
+    </div>
+
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>P5 — Panel de siniestros (ClaimRow)</div>
+      <SectionCard>
+        <ClaimRow clientName="Laura Gómez" claimType="Daño por agua" claimStatus="abierto" onClick={() => console.log("open")} />
+        <ClaimRow clientName="Manuel Ortiz" claimType="Robo en vivienda" claimStatus="tramitacion" onClick={() => console.log("open")} />
+        <ClaimRow clientName="Carmen Soler" claimType="Accidente de tráfico" claimStatus="resuelto" divider={false} onClick={() => console.log("open")} />
+      </SectionCard>
+    </div>
+
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>Ficha de siniestro — Partes afectadas (AffectedPartyRow)</div>
+      <SectionCard>
+        {parties.map((p, i) => (
+          <AffectedPartyRow key={p.id} name={p.name} phone={p.phone} email={p.email}
+            divider={i < parties.length - 1}
+            onEdit={() => console.log("edit party", p.id)}
+            onRemove={() => setParties(ps => ps.filter(x => x.id !== p.id))} />
+        ))}
+      </SectionCard>
+    </div>
+
+    <div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>P3 — Historial de contactos (ContactHistoryItem)</div>
+      <SectionCard title="Historial de contactos">
+        <ContactHistoryItem type="whatsapp" datetime="17 jul, 10:24" author="Antonio"
+          note="Envié el presupuesto del seguro de hogar, queda a la espera de confirmar." />
+        <ContactHistoryItem type="llamada" datetime="15 jul, 09:02" author="Mónica"
+          note="Llamada de 10 min, interesada en ampliar la cobertura de auto." />
+        <ContactHistoryItem type="correo" datetime="10 jul, 17:40" author="Antonio" divider={false}
+          note="Primer contacto por el formulario web." />
+      </SectionCard>
+    </div>
+
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo/>);
+</script>

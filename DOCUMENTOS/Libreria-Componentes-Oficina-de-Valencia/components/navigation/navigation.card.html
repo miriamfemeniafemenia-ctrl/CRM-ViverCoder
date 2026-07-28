@@ -1,0 +1,50 @@
+<!-- @dsCard group="Components" viewport="900x520" name="Main Navigation" subtitle="Side nav (desktop), bottom nav (mobile), and Tabs" -->
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;font-family:var(--font-sans);background:var(--surface-app)}</style>
+<div id="root"></div>
+<script type="text/babel">
+const { MainNav, Tabs } = window.OFICINADEVALENCIA_a871c7;
+function Demo(){
+  const [active, setActive] = React.useState("clients");
+  const [user, setUser] = React.useState("monica");
+  const [range, setRange] = React.useState("hoy");
+  return <div style={{display:"flex",height:340,border:"1px solid var(--border-default)"}}>
+    <MainNav active={active} onNavigate={setActive} mode="desktop" counts={{ tasks: 3 }} />
+    <div style={{flex:1,padding:20,display:"flex",flexDirection:"column",gap:20}}>
+      <div>
+        <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>Tabs — por usuario, con contador</div>
+        <Tabs
+          items={[
+            { key: "monica", label: "Mónica", count: 3 },
+            { key: "antonio", label: "Antonio", count: 0 },
+            { key: "miriam", label: "Miriam" },
+          ]}
+          active={user}
+          onChange={setUser}
+        />
+      </div>
+      <div>
+        <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:8}}>Tabs — Hoy / Próximas</div>
+        <Tabs
+          items={[
+            { key: "hoy", label: "Hoy" },
+            { key: "proximas", label: "Próximas" },
+          ]}
+          active={range}
+          onChange={setRange}
+        />
+      </div>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)"}}>Vista móvil (nav inferior):</div>
+      <div style={{maxWidth:360,border:"1px solid var(--border-default)"}}>
+        <div style={{height:100,background:"var(--surface-card)"}} />
+        <MainNav active={active} onNavigate={setActive} mode="mobile" counts={{ tasks: 3 }} />
+      </div>
+    </div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo/>);
+</script>

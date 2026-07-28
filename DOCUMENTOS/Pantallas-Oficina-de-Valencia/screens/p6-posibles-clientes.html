@@ -1,0 +1,50 @@
+<!-- @dsCard group="Pantallas" viewport="390x760" name="P6 — Posibles clientes" subtitle="F14 — filtro sobre la lista de clientes a interesado, con atajo Convertir en cliente" -->
+<link rel="stylesheet" href="../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../_ds_bundle.js"></script>
+<style>html,body{margin:0;height:100%;font-family:var(--font-sans);background:var(--surface-app)}</style>
+<div id="root" style="height:760px;overflow:hidden"></div>
+<script type="text/babel">
+const { SearchBar, SectionCard, ClientRow, Button, MainNav, EmptyState } = window.OFICINADEVALENCIA_a871c7;
+
+function Demo(){
+  const [query, setQuery] = React.useState("");
+  const [clients, setClients] = React.useState([
+    { id: 1, name: "Elena Vidal", saleStatus: "interesado" },
+    { id: 2, name: "Jordi Serra", saleStatus: "interesado", priority: "media" },
+    { id: 3, name: "Marta Puig", saleStatus: "interesado" },
+  ]);
+
+  const convert = id => setClients(cs => cs.map(c => c.id === id ? { ...c, saleStatus: "presupuesto" } : c));
+  const leads = clients.filter(c => c.saleStatus === "interesado" && c.name.toLowerCase().includes(query.toLowerCase()));
+
+  return <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+    <div style={{padding:"var(--space-5) var(--space-4) var(--space-3)"}}>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:4}}>F14 — Posibles clientes (Mejora 5)</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"var(--space-3)"}}>
+        <h1 style={{margin:0,font:"var(--text-title)",color:"var(--text-primary)"}}>Posibles clientes</h1>
+        <Button variant="secondary" size="compact" icon="add" onClick={() => console.log("nuevo posible cliente")}>Nuevo</Button>
+      </div>
+      <SearchBar value={query} onChange={setQuery} />
+    </div>
+    <div style={{flex:1,overflowY:"auto",padding:"0 var(--space-4) var(--space-4)"}}>
+      {leads.length ? (
+        <SectionCard>
+          {leads.map((c, i) => (
+            <ClientRow key={c.id} name={c.name} saleStatus={c.saleStatus} priority={c.priority}
+              action={<Button variant="secondary" size="compact" onClick={() => convert(c.id)}>Convertir en cliente</Button>}
+              divider={i < leads.length - 1}
+              onClick={() => console.log("open client", c.id)} />
+          ))}
+        </SectionCard>
+      ) : (
+        <EmptyState icon="search" message="No hay posibles clientes que coincidan." />
+      )}
+    </div>
+    <MainNav mode="mobile" active="leads" onNavigate={k => console.log("nav", k)} />
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo/>);
+</script>

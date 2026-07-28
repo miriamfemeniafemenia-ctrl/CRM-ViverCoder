@@ -1,0 +1,60 @@
+<!-- @dsCard group="Pantallas" viewport="1280x832" name="F13 — Alertas de sin seguimiento" subtitle="Vista de supervisión para Miriam — clientes activos sin contacto reciente" -->
+<link rel="stylesheet" href="../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../_ds_bundle.js"></script>
+<style>html,body{margin:0;height:100%;font-family:var(--font-sans);background:var(--surface-app)}</style>
+<div id="root" style="height:832px;overflow:hidden"></div>
+<script type="text/babel">
+const { MainNav, SectionCard, ClientRow, Select, Button } = window.OFICINADEVALENCIA_a871c7;
+
+const agentOptions = [
+  { value: "monica", label: "Mónica" },
+  { value: "antonio", label: "Antonio" },
+  { value: "miriam", label: "Miriam" },
+];
+
+function Demo(){
+  const [clients, setClients] = React.useState([
+    { id: 1, name: "Manuel Ortiz", saleStatus: "interesado", days: 12, agent: "antonio" },
+    { id: 2, name: "Beatriz Molina", saleStatus: "presupuesto", days: 9, agent: "monica" },
+    { id: 3, name: "Pedro Ibáñez", saleStatus: "interesado", priority: "alta", days: 15, agent: "monica" },
+  ]);
+
+  const reassign = (id, agent) => setClients(cs => cs.map(c => c.id === id ? { ...c, agent } : c));
+  const agentName = v => {
+    const found = agentOptions.find(o => o.value === v);
+    return found ? found.label : v;
+  };
+
+  return <div style={{display:"flex",height:"100%"}}>
+    <MainNav mode="desktop" active="unfollowed" onNavigate={k => console.log("nav", k)} />
+    <div style={{flex:1,overflowY:"auto",padding:"var(--space-6)",boxSizing:"border-box"}}>
+      <div style={{font:"var(--text-meta)",color:"var(--text-tertiary)",marginBottom:4}}>F13 — Alertas de sin seguimiento (T10)</div>
+      <h1 style={{margin:"0 0 var(--space-1)",font:"var(--text-title)",color:"var(--text-primary)"}}>Clientes sin seguimiento</h1>
+      <p style={{margin:"0 0 var(--space-6)",font:"var(--text-body)",color:"var(--text-secondary)"}}>Sin contacto en más de 7 días · excluye cerrados y perdidos</p>
+
+      <div style={{maxWidth:760}}>
+        <SectionCard>
+          {clients.map((c, i) => (
+            <ClientRow key={c.id} name={c.name} saleStatus={c.saleStatus} priority={c.priority}
+              subtitle={`${c.days} días sin contacto · Agente: ${agentName(c.agent)}`}
+              action={
+                <span style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{width:132}}>
+                    <Select value={c.agent} options={agentOptions} onChange={v => reassign(c.id, v)} />
+                  </span>
+                  <Button variant="secondary" size="compact" icon="add" onClick={() => console.log("crear recordatorio", c.id)}>Recordatorio</Button>
+                </span>
+              }
+              divider={i < clients.length - 1}
+              onClick={() => console.log("open client", c.id)} />
+          ))}
+        </SectionCard>
+      </div>
+    </div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo/>);
+</script>

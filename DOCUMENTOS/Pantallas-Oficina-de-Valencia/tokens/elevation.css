@@ -1,0 +1,38 @@
+/* ============================================================
+   OFICINA DE VALENCIA — ELEVATION, BORDERS, MOTION TOKENS
+   Whisper-soft, layered shadows (2 stacked low-alpha shadows
+   rather than one heavy drop shadow) — the Starbucks cue, tuned
+   down for a cooler/quieter professional read. This is the one
+   deliberate divergence from Apple/Tesla's near-zero-shadow
+   approach: a CRM has real overlapping surfaces (dropdowns,
+   modals, sticky headers) that need a functional depth cue.
+   Motion is quick and functional; the scale-press micro-
+   interaction is shared across all three inspirations, so it's
+   adopted here as the universal "pressed" feedback.
+   ============================================================ */
+
+:root {
+  --shadow-xs: 0 1px 2px oklch(20% 0.01 255 / 0.05);
+  --shadow-sm: 0 1px 2px oklch(20% 0.01 255 / 0.06), 0 1px 1px oklch(20% 0.01 255 / 0.04);
+  --shadow-md: 0 2px 6px oklch(20% 0.01 255 / 0.08), 0 1px 2px oklch(20% 0.01 255 / 0.05);
+  --shadow-lg: 0 8px 20px oklch(20% 0.01 255 / 0.12), 0 2px 6px oklch(20% 0.01 255 / 0.06);
+  --shadow-nav: 0 1px 3px oklch(20% 0.01 255 / 0.08);
+
+  --border-width: 1px;
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1); /* @kind other */
+  --duration-fast: 120ms; /* @kind other */
+  --duration-base: 160ms; /* @kind other */
+  --duration-slow: 240ms; /* @kind other */
+
+  /* Universal press feedback — shared cue across every interactive
+     control (Apple/Tesla/Starbucks all converge on this). */
+  --scale-press: 0.97; /* @kind other */
+}
+
+/* Button loading spinner (added 2026-07-19). Global keyframes live here
+   since inline styles can't declare @keyframes. */
+@keyframes ov-spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,35 @@
+/* ============================================================
+   OFICINA DE VALENCIA — TYPE TOKENS
+   Single family (Inter) — disciplined weight ladder (400/500/
+   600/700) so hierarchy comes from weight and size, never from
+   mixing typefaces. Slight negative tracking on display/title
+   sizes (an Apple/Starbucks cue) gives headlines a tighter,
+   more engineered feel appropriate to a financial/insurance tool.
+   Sizes run smaller than a consumer app — this is a desktop-
+   first, data-dense CRM read by the same team all day.
+   ============================================================ */
+
+:root {
+  --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Weights */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Scale — compact, desktop-first. Nothing above 28px; this is a
+     tool, not a marketing surface, so there is no "hero" tier. */
+  --text-display:      600 28px/1.2  var(--font-sans);  /* rare: dashboard page title */
+  --text-title:        600 20px/1.3  var(--font-sans);  /* screen/section titles */
+  --text-subtitle:     600 15px/1.4  var(--font-sans);  /* card/block headers */
+  --text-body-strong:  600 14px/1.5  var(--font-sans);  /* emphasized body */
+  --text-body:         400 14px/1.5  var(--font-sans);  /* default body/paragraph */
+  --text-label:        500 13px/1.4  var(--font-sans);  /* form labels, buttons, table headers */
+  --text-meta:         400 12px/1.4  var(--font-sans);  /* timestamps, helper text */
+  --text-micro:        600 11px/1.3  var(--font-sans);  /* badges, tags, uppercase kickers */
+
+  --letter-spacing-tight: -0.01em;   /* display, title */
+  --letter-spacing-wide:  0.04em;    /* uppercase micro labels only */
+}
