@@ -1,0 +1,270 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens ported 1:1 from the "Oficina de Valencia" design system
+ * (Claude Design project a871c705-9284-40a7-a6c0-014faf584070).
+ * Keep these in sync with that project — it's the source of truth for visual design.
+ * Tailwind v4 auto-generates utilities from @theme (e.g. --color-primary-500 -> bg-primary-500).
+ */
+
+:root {
+  /* Primary — corporate-trust blue, the single brand accent */
+  --color-primary-50: oklch(97% 0.012 255);
+  --color-primary-100: oklch(92.5% 0.028 254);
+  --color-primary-200: oklch(85% 0.052 253);
+  --color-primary-300: oklch(74% 0.078 252);
+  --color-primary-400: oklch(62% 0.105 251);
+  --color-primary-500: oklch(50% 0.125 251);
+  --color-primary-600: oklch(43% 0.12 252);
+  --color-primary-700: oklch(35% 0.105 253);
+  --color-primary-800: oklch(27% 0.085 254);
+  --color-primary-900: oklch(17% 0.06 255);
+
+  /* Secondary — graphite-ink, reserved (ARC-36 compliance), not a competing accent */
+  --color-secondary-50: oklch(97% 0.006 255);
+  --color-secondary-100: oklch(92% 0.01 255);
+  --color-secondary-300: oklch(76% 0.016 255);
+  --color-secondary-500: oklch(42% 0.028 255);
+  --color-secondary-600: oklch(34% 0.026 255);
+  --color-secondary-700: oklch(27% 0.022 255);
+  --color-secondary-900: oklch(14% 0.014 255);
+
+  /* Neutrals — cool grays, no warm tint */
+  --color-neutral-0: oklch(100% 0 0);
+  --color-neutral-50: oklch(98% 0.003 255);
+  --color-neutral-100: oklch(95.5% 0.004 255);
+  --color-neutral-200: oklch(91% 0.006 255);
+  --color-neutral-300: oklch(84% 0.008 255);
+  --color-neutral-400: oklch(70% 0.01 255);
+  --color-neutral-500: oklch(56% 0.012 255);
+  --color-neutral-600: oklch(45% 0.012 255);
+  --color-neutral-700: oklch(35% 0.012 255);
+  --color-neutral-800: oklch(25% 0.01 255);
+  --color-neutral-900: oklch(15% 0.008 255);
+
+  /* Sale-status (F7 — interesado / presupuesto / cerrado / perdido) */
+  --color-sale-interesado-fg: oklch(38% 0.09 190);
+  --color-sale-interesado-bg: oklch(93% 0.035 190);
+  --color-sale-presupuesto-fg: oklch(40% 0.11 75);
+  --color-sale-presupuesto-bg: oklch(92% 0.05 78);
+  --color-sale-cerrado-fg: oklch(35% 0.1 150);
+  --color-sale-cerrado-bg: oklch(92% 0.04 150);
+  --color-sale-perdido-fg: oklch(42% 0.02 25);
+  --color-sale-perdido-bg: oklch(90% 0.006 25);
+
+  /* Claim-status (F11 — abierto / en tramitación / resuelto) */
+  --color-claim-abierto-fg: oklch(40% 0.14 35);
+  --color-claim-abierto-bg: oklch(92% 0.055 38);
+  --color-claim-tramitacion-fg: oklch(38% 0.11 300);
+  --color-claim-tramitacion-bg: oklch(92% 0.035 300);
+  --color-claim-resuelto-fg: oklch(35% 0.08 165);
+  --color-claim-resuelto-bg: oklch(91% 0.035 165);
+
+  /* Priority (Mejora 1 — alta / media / baja) */
+  --color-priority-alta-fg: oklch(40% 0.16 25);
+  --color-priority-alta-bg: oklch(93% 0.06 25);
+  --color-priority-media-fg: oklch(42% 0.09 95);
+  --color-priority-media-bg: oklch(92% 0.05 95);
+  --color-priority-baja-fg: oklch(38% 0.05 145);
+  --color-priority-baja-bg: oklch(92% 0.02 145);
+
+  /* Policy-status (F3/D5 — activa / reemplazada / anulada) */
+  --color-policy-activa-fg: oklch(35% 0.09 168);
+  --color-policy-activa-bg: oklch(92% 0.035 168);
+  --color-policy-reemplazada-fg: var(--color-neutral-600);
+  --color-policy-reemplazada-bg: var(--color-neutral-100);
+  --color-policy-anulada-fg: oklch(38% 0.14 15);
+  --color-policy-anulada-bg: oklch(92% 0.05 15);
+
+  /* Warning (e.g. overdue reminders) */
+  --color-warning-fg: oklch(38% 0.16 22);
+  --color-warning-bg: oklch(92% 0.05 22);
+  --color-warning-border: oklch(65% 0.15 22);
+
+  /* Surfaces */
+  --color-surface-app: var(--color-neutral-50);
+  --color-surface-card: var(--color-neutral-0);
+  --color-surface-sunken: var(--color-neutral-100);
+  --color-surface-overlay: oklch(15% 0.01 255 / 0.5);
+  --color-surface-brand: var(--color-primary-500);
+  --color-surface-brand-strong: var(--color-primary-700);
+
+  /* Borders */
+  --color-border-default: var(--color-neutral-200);
+  --color-border-strong: var(--color-neutral-300);
+  --color-border-focus: var(--color-primary-500);
+
+  /* Text */
+  --color-text-primary: var(--color-neutral-900);
+  --color-text-secondary: var(--color-neutral-600);
+  --color-text-tertiary: var(--color-neutral-500);
+  --color-text-on-brand: var(--color-neutral-0);
+  --color-text-link: var(--color-primary-600);
+
+  --shadow-focus-ring: 0 0 0 3px oklch(50% 0.125 251 / 0.35);
+
+  /* Type */
+  --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --letter-spacing-tight: -0.01em;
+  --letter-spacing-wide: 0.04em;
+
+  /* Spacing — base-4 scale, desktop-first */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+  --breakpoint-desktop: 768px;
+  --content-max-width: 1360px;
+  --page-margin-mobile: var(--spacing-4);
+  --page-margin-desktop: var(--spacing-6);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --bottom-nav-height: 60px;
+  --side-nav-width: 232px;
+  --header-height: 52px;
+  --table-row-height: 40px;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Accessibility — 44px touch target on mobile/touch, 36px from desktop breakpoint up */
+  --tap-target-min: 44px;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px oklch(20% 0.01 255 / 0.05);
+  --shadow-sm: 0 1px 2px oklch(20% 0.01 255 / 0.06), 0 1px 1px oklch(20% 0.01 255 / 0.04);
+  --shadow-md: 0 2px 6px oklch(20% 0.01 255 / 0.08), 0 1px 2px oklch(20% 0.01 255 / 0.05);
+  --shadow-lg: 0 8px 20px oklch(20% 0.01 255 / 0.12), 0 2px 6px oklch(20% 0.01 255 / 0.06);
+  --shadow-nav: 0 1px 3px oklch(20% 0.01 255 / 0.08);
+  --border-width: 1px;
+  --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --duration-slow: 240ms;
+  --scale-press: 0.97;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --tap-target-min: 36px;
+  }
+}
+
+/* Tailwind v4 theme mapping — turns the tokens above into utility classes
+   (bg-primary-500, text-body, rounded-md, shadow-md, ease-standard, ...). */
+@theme inline {
+  --color-primary-50: var(--color-primary-50);
+  --color-primary-100: var(--color-primary-100);
+  --color-primary-200: var(--color-primary-200);
+  --color-primary-300: var(--color-primary-300);
+  --color-primary-400: var(--color-primary-400);
+  --color-primary-500: var(--color-primary-500);
+  --color-primary-600: var(--color-primary-600);
+  --color-primary-700: var(--color-primary-700);
+  --color-primary-800: var(--color-primary-800);
+  --color-primary-900: var(--color-primary-900);
+
+  --color-secondary-50: var(--color-secondary-50);
+  --color-secondary-100: var(--color-secondary-100);
+  --color-secondary-300: var(--color-secondary-300);
+  --color-secondary-500: var(--color-secondary-500);
+  --color-secondary-600: var(--color-secondary-600);
+  --color-secondary-700: var(--color-secondary-700);
+  --color-secondary-900: var(--color-secondary-900);
+
+  --color-neutral-0: var(--color-neutral-0);
+  --color-neutral-50: var(--color-neutral-50);
+  --color-neutral-100: var(--color-neutral-100);
+  --color-neutral-200: var(--color-neutral-200);
+  --color-neutral-300: var(--color-neutral-300);
+  --color-neutral-400: var(--color-neutral-400);
+  --color-neutral-500: var(--color-neutral-500);
+  --color-neutral-600: var(--color-neutral-600);
+  --color-neutral-700: var(--color-neutral-700);
+  --color-neutral-800: var(--color-neutral-800);
+  --color-neutral-900: var(--color-neutral-900);
+
+  --color-surface-app: var(--color-surface-app);
+  --color-surface-card: var(--color-surface-card);
+  --color-surface-sunken: var(--color-surface-sunken);
+  --color-surface-overlay: var(--color-surface-overlay);
+  --color-surface-brand: var(--color-surface-brand);
+  --color-surface-brand-strong: var(--color-surface-brand-strong);
+
+  --color-border-default: var(--color-border-default);
+  --color-border-strong: var(--color-border-strong);
+  --color-border-focus: var(--color-border-focus);
+
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary: var(--color-text-tertiary);
+  --color-text-on-brand: var(--color-text-on-brand);
+  --color-text-link: var(--color-text-link);
+
+  --color-warning-fg: var(--color-warning-fg);
+  --color-warning-bg: var(--color-warning-bg);
+  --color-warning-border: var(--color-warning-border);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --spacing-1: var(--spacing-1);
+  --spacing-2: var(--spacing-2);
+  --spacing-3: var(--spacing-3);
+  --spacing-4: var(--spacing-4);
+  --spacing-5: var(--spacing-5);
+  --spacing-6: var(--spacing-6);
+  --spacing-8: var(--spacing-8);
+  --spacing-10: var(--spacing-10);
+  --spacing-12: var(--spacing-12);
+  --spacing-16: var(--spacing-16);
+
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-nav: var(--shadow-nav);
+
+  --ease-standard: var(--ease-standard);
+  --duration-fast: var(--duration-fast);
+  --duration-base: var(--duration-base);
+  --duration-slow: var(--duration-slow);
+}
+
+body {
+  background: var(--color-surface-app);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+/* Universal press feedback — the one signature micro-interaction shared
+   across every interactive control (button, badge-as-button, nav item). */
+.press-feedback {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+.press-feedback:active {
+  transform: scale(var(--scale-press));
+}
