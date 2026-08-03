@@ -5,13 +5,17 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Override default ignores of eslint-config-next.
+  // Override default ignores of eslint-config-next. Globstar-prefixed so
+  // these also match nested build output (e.g. inside a Claude Code
+  // worktree under .claude/worktrees/*/.next/), not just the project root.
   globalIgnores([
     // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
+    "**/.next/**",
+    "**/out/**",
+    "**/build/**",
     "next-env.d.ts",
+    // Claude Code worktrees carry their own node_modules/.next.
+    ".claude/**",
   ]),
 ]);
 
