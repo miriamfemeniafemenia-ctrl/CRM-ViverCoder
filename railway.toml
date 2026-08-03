@@ -11,3 +11,15 @@ restartPolicyMaxRetries = 3
 # dashboard (Variables tab) instead:
 #   NEXT_PUBLIC_CONVEX_URL   — from `npx convex deploy` (production deployment)
 #   PORT                     — Railway sets this automatically; Next.js reads it
+#
+# Since ARC-7 (Convex Auth), a PRODUCTION Convex deployment (not the `dev`
+# one used during development) must exist before this can go live:
+#   1. `npx convex deploy` — creates/updates the prod deployment and gives
+#      you its URL for NEXT_PUBLIC_CONVEX_URL above.
+#   2. On that prod deployment, set JWT_PRIVATE_KEY / JWKS / SITE_URL
+#      (SITE_URL = the real Railway URL, not localhost) — see the
+#      "Autenticación (ARC-7)" section of README.md.
+#   3. Seed the 3 real accounts on the prod deployment (convex/seed.ts) —
+#      the dev-deployment accounts do NOT carry over.
+# `convex-client-provider.tsx` will throw at build time in production if
+# NEXT_PUBLIC_CONVEX_URL is missing, by design — see its comments.
