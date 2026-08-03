@@ -91,7 +91,7 @@ npm run dev
 2. El schema ya está en `convex/schema.ts` — `npx convex dev` lo desplegará
    en cuanto lo detecte.
 
-### Autenticación (ARC-7)
+### Autenticación (ARC-7) — implementada y verificada en vivo (2026-08-04)
 
 Implementada con **Convex Auth** (`@convex-dev/auth`), provider `Password`
 (email + contraseña), sin registro público: son 3 cuentas fijas (Miriam,
@@ -101,43 +101,48 @@ cuentas (que usa `createAccount` directamente) no se autobloquea. Detalle
 completo verificado contra el código fuente de la librería en el plan
 `ARC-7 — Sistema de autenticación real`.
 
-**Pasos para dejarlo operativo en un deployment real** (no ejecutados aquí:
-este repo se desarrolló en un worktree aislado sin conexión a un Convex
-deployment real):
+**Estado actual**: el deployment dev (`wary-stork-704`) ya tiene el schema
+desplegado, las claves JWT configuradas (`JWT_PRIVATE_KEY`/`JWKS`/`SITE_URL`)
+y las 3 cuentas sembradas. Verificado end-to-end en el navegador y por HTTP
+directo: login/logout reales, redirección de rutas protegidas sin sesión,
+bloqueo de auto-registro contra el backend real, y banner de error con
+credenciales incorrectas.
 
-1. `npx convex dev` (o `npx convex deploy` en producción) — genera
-   `convex/_generated/`, sube `convex/schema.ts` y `convex/auth.config.ts`,
-   y falta configurar las claves JWT:
-   ```bash
-   npx convex env set JWT_PRIVATE_KEY "..."
-   npx convex env set JWKS "..."
-   npx convex env set SITE_URL "http://localhost:3000"   # o el dominio real en producción
-   ```
-   Estas claves se generan con `generateKeyPair("RS256")` (paquete `jose`) —
-   la forma más simple es ejecutar `npx @convex-dev/auth` una vez con el
-   proyecto ya conectado (`npx convex dev` corriendo), que las genera y las
-   sube por ti.
-2. Sembrar las 3 cuentas fijas:
-   ```bash
-   npx convex env set SEED_MIRIAM_EMAIL "..."
-   npx convex env set SEED_MIRIAM_PASSWORD "..."
-   npx convex env set SEED_MONICA_EMAIL "..."
-   npx convex env set SEED_MONICA_PASSWORD "..."
-   npx convex env set SEED_ANTONIO_EMAIL "..."
-   npx convex env set SEED_ANTONIO_PASSWORD "..."
-   npx convex run seed:default
-   ```
-   Después, retira esas variables (`npx convex env remove SEED_...`) — el
-   seed solo se ejecuta una vez por deployment.
-3. Verificar el flujo completo (login real, `/clientes` redirige a `/login`
-   sin sesión, logout, intento manual de `signUp` bloqueado) — ver la lista
-   de verificación end-to-end del plan de ARC-7.
+**⚠️ Higiene pendiente antes de manejar datos reales de clientes:**
+- Las 3 contraseñas iniciales se escribieron en un chat para poder
+  sembrarlas — trátalas como comprometidas. Rótalas (ver procedimiento de
+  reseteo abajo) tras el primer login de cada persona, o al menos antes de
+  que este deployment maneje datos reales de clientes.
+- `JWT_PRIVATE_KEY` quedó expuesto una vez en texto plano al listar
+  variables de entorno con `npx convex env list` — ya se regeneró y rotó
+  (la clave expuesta no está en uso), pero evita `env list` para variables
+  sensibles en el futuro; usa `env get NOMBRE` una a una, o revisa solo los
+  nombres.
 
-**Reseteo de contraseña**: no hay recuperación automática (solo 3 cuentas).
-Miriam/quien tenga acceso al deployment cambia una contraseña vía
-`modifyAccountCredentials` (de `@convex-dev/auth/server`) desde una función
-interna o la consola de Convex — no hay UI para esto (fuera de alcance de
-ARC-7).
+**Reseteo manual de contraseña** (no hay recuperación automática con solo 3
+cuentas — pasos para quien tenga acceso al deployment de Convex, p. ej.
+Miriam):
+1. Entra al [dashboard de Convex](https://dashboard.convex.dev) → el
+   proyecto `oficina-valencia` → pestaña **Functions**.
+2. Ejecuta manualmente una función que llame a
+   `modifyAccountCredentials(ctx, { provider: "password", account: { id: emailNormalizado, secret: nuevaContraseña } })`
+   (de `@convex-dev/auth/server`) — hoy no existe como función lista para
+   ejecutar desde el dashboard; lo más simple es pedir a quien tenga el
+   repo que añada temporalmente una `internalMutation`/`internalAction` con
+   esa llamada (igual que `convex/seed.ts`), ejecutarla una vez vía
+   `npx convex run`, y borrarla después. No hay UI para esto — está fuera
+   de alcance de ARC-7 a propósito (sin panel de administración).
+3. Comunica la nueva contraseña a la persona por un canal que no sea este
+   tipo de chat/historial persistente.
+
+**Regla de seguridad para todo lo que se construya a partir de aquí
+(ARC-8 y P1–P6)**: proteger rutas con `src/proxy.ts` protege la
+**navegación**, no sustituye la autorización dentro de Convex. Ninguna
+query/mutation pública sobre `clients`/`contacts`/`reminders`/`claims`/
+`policies` debe publicarse sin validar `getAuthUserId(ctx)` al principio
+(devolviendo `null`/lanzando si no hay sesión), más cualquier chequeo de rol
+u ownership que aplique. `convex/users.ts` (`current`) ya sigue este patrón
+— úsalo como referencia.
 
 **Para ARC-8 (shell de navegación)**: `useAuthActions().signOut()` (de
 `@convex-dev/auth/react`) ya está disponible — reutilízalo en el botón de
