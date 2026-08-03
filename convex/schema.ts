@@ -1,18 +1,30 @@
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 /**
  * Mirrors the data model in the CRM-PRD (Notion) — D1 to D5 — plus a
- * minimal `users` table for the 3 fixed accounts (ARC-7, reopened).
+ * `users` table for the 3 fixed accounts (ARC-7, reopened), extending
+ * Convex Auth's `authTables`.
  * Keep field names/shapes in sync with that document when it changes.
  */
 export default defineSchema({
+  ...authTables,
   // Fixed team accounts — Miriam, Mónica, Antonio. No self-registration (ARC-7).
+  // `email`/`phone` index names and the optional verification-time fields
+  // mirror @convex-dev/auth's own `authTables.users` shape (confirmed by
+  // reading its source) so any internal account-linking lookups that query
+  // those exact index names keep working.
   users: defineTable({
     name: v.string(),
     email: v.string(),
     role: v.union(v.literal("owner"), v.literal("agent")),
-  }).index("by_email", ["email"]),
+    phone: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phoneVerificationTime: v.optional(v.number()),
+  })
+    .index("email", ["email"])
+    .index("phone", ["phone"]),
 
   // D1 — Cliente: the central record everything else points to.
   clients: defineTable({

@@ -18,7 +18,12 @@ el MVP descrito en el PRD de Notion ("CRM-PRD") y planificado en Linear
 
 ```
 convex/
-  schema.ts              — D1-D5 del PRD (clients, contacts, reminders, claims, policies) + users
+  schema.ts              — D1-D5 del PRD (clients, contacts, reminders, claims, policies) + users + authTables
+  auth.ts                — configuración de Convex Auth (provider Password, guard anti-signup)
+  auth.config.ts         — config del proveedor JWT de Convex Auth
+  seed.ts                — internalAction: aprovisiona las 3 cuentas fijas
+  users.ts               — query `current`: usuario autenticado
+  http.ts                — rutas HTTP de Convex Auth
 src/
   app/                   — rutas (App Router), ver mapa de rutas abajo
   components/            — componentes de UI, a portar desde el design system
@@ -26,6 +31,7 @@ src/
   lib/
     convex-client-provider.tsx
     utils.ts             — helper cn() (clsx + tailwind-merge)
+  proxy.ts               — protege todas las rutas salvo /login (Next.js 16: proxy.ts, no middleware.ts)
   types/
     index.ts             — tipos de dominio compartidos
   hooks/                 — hooks compartidos (vacío por ahora)
@@ -51,7 +57,9 @@ desde P3 — no tienen ruta propia, según el PRD.
 
 Cada `page.tsx` es ahora mismo un `ScreenPlaceholder`
 (`src/components/screen-placeholder.tsx`) — quítalo en cuanto se porte la
-pantalla real.
+pantalla real. `/login` ya es una pantalla real (ARC-7); el resto sigue
+pendiente y ahora está protegido por `src/proxy.ts` (redirige a `/login` si
+no hay sesión).
 
 ## Diseño
 
@@ -83,12 +91,57 @@ npm run dev
 2. El schema ya está en `convex/schema.ts` — `npx convex dev` lo desplegará
    en cuanto lo detecte.
 
-### Autenticación (ARC-7, reabierto)
+### Autenticación (ARC-7)
 
-Pendiente de decidir el enfoque concreto (Convex Auth, o un login propio
-contra la tabla `users`) antes de construir `/login` de verdad — de momento
-solo hay un placeholder. Son 3 cuentas fijas (Miriam, Mónica, Antonio), sin
-auto-registro.
+Implementada con **Convex Auth** (`@convex-dev/auth`), provider `Password`
+(email + contraseña), sin registro público: son 3 cuentas fijas (Miriam,
+Mónica, Antonio). El auto-registro se bloquea en el `profile` callback del
+provider (`convex/auth.ts`), no en un callback global — así el seed de las 3
+cuentas (que usa `createAccount` directamente) no se autobloquea. Detalle
+completo verificado contra el código fuente de la librería en el plan
+`ARC-7 — Sistema de autenticación real`.
+
+**Pasos para dejarlo operativo en un deployment real** (no ejecutados aquí:
+este repo se desarrolló en un worktree aislado sin conexión a un Convex
+deployment real):
+
+1. `npx convex dev` (o `npx convex deploy` en producción) — genera
+   `convex/_generated/`, sube `convex/schema.ts` y `convex/auth.config.ts`,
+   y falta configurar las claves JWT:
+   ```bash
+   npx convex env set JWT_PRIVATE_KEY "..."
+   npx convex env set JWKS "..."
+   npx convex env set SITE_URL "http://localhost:3000"   # o el dominio real en producción
+   ```
+   Estas claves se generan con `generateKeyPair("RS256")` (paquete `jose`) —
+   la forma más simple es ejecutar `npx @convex-dev/auth` una vez con el
+   proyecto ya conectado (`npx convex dev` corriendo), que las genera y las
+   sube por ti.
+2. Sembrar las 3 cuentas fijas:
+   ```bash
+   npx convex env set SEED_MIRIAM_EMAIL "..."
+   npx convex env set SEED_MIRIAM_PASSWORD "..."
+   npx convex env set SEED_MONICA_EMAIL "..."
+   npx convex env set SEED_MONICA_PASSWORD "..."
+   npx convex env set SEED_ANTONIO_EMAIL "..."
+   npx convex env set SEED_ANTONIO_PASSWORD "..."
+   npx convex run seed:default
+   ```
+   Después, retira esas variables (`npx convex env remove SEED_...`) — el
+   seed solo se ejecuta una vez por deployment.
+3. Verificar el flujo completo (login real, `/clientes` redirige a `/login`
+   sin sesión, logout, intento manual de `signUp` bloqueado) — ver la lista
+   de verificación end-to-end del plan de ARC-7.
+
+**Reseteo de contraseña**: no hay recuperación automática (solo 3 cuentas).
+Miriam/quien tenga acceso al deployment cambia una contraseña vía
+`modifyAccountCredentials` (de `@convex-dev/auth/server`) desde una función
+interna o la consola de Convex — no hay UI para esto (fuera de alcance de
+ARC-7).
+
+**Para ARC-8 (shell de navegación)**: `useAuthActions().signOut()` (de
+`@convex-dev/auth/react`) ya está disponible — reutilízalo en el botón de
+cerrar sesión en vez de reimplementar nada.
 
 ## Subir a GitHub
 
