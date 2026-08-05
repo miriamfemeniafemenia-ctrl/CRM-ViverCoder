@@ -47,3 +47,6 @@ convex/_generated
 # Claude Code worktrees — isolated dev copies (own node_modules/.next/.env.local),
 # never part of the actual project source.
 .claude/
+
+# local-only prototype assets, not part of the repo history
+DOCUMENTOS/Prueba de prototipo — Oficina de Valencia.zip
