@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm run build"
+buildCommand = "npx convex codegen && npx convex deploy --cmd 'npm run build'"
 
 [deploy]
 startCommand = "npm run start"
@@ -10,6 +10,9 @@ restartPolicyMaxRetries = 3
 # Environment variables are NOT set here — configure them in the Railway
 # dashboard (Variables tab) instead:
 #   NEXT_PUBLIC_CONVEX_URL   — from `npx convex deploy` (production deployment)
+#   CONVEX_DEPLOY_KEY        — prod deploy key; lets buildCommand run
+#                              `npx convex deploy` during the Railway build so
+#                              convex/_generated exists before `next build`
 #   PORT                     — Railway sets this automatically; Next.js reads it
 #
 # Since ARC-7 (Convex Auth), a PRODUCTION Convex deployment (not the `dev`
