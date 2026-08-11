@@ -29,7 +29,7 @@ export default defineSchema({
   // D1 — Cliente: the central record everything else points to.
   clients: defineTable({
     name: v.string(),
-    phone: v.string(),
+    phone: v.optional(v.string()),
     secondPhone: v.optional(v.string()),
     whatsapp: v.optional(v.string()),
     email: v.optional(v.string()),

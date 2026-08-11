@@ -222,6 +222,15 @@
   --color-warning-bg: var(--color-warning-bg);
   --color-warning-border: var(--color-warning-border);
 
+  --color-sale-interesado-fg: var(--color-sale-interesado-fg);
+  --color-sale-interesado-bg: var(--color-sale-interesado-bg);
+  --color-sale-presupuesto-fg: var(--color-sale-presupuesto-fg);
+  --color-sale-presupuesto-bg: var(--color-sale-presupuesto-bg);
+  --color-sale-cerrado-fg: var(--color-sale-cerrado-fg);
+  --color-sale-cerrado-bg: var(--color-sale-cerrado-bg);
+  --color-sale-perdido-fg: var(--color-sale-perdido-fg);
+  --color-sale-perdido-bg: var(--color-sale-perdido-bg);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
