@@ -3,7 +3,7 @@
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 
 const SALE_STATUS_LABEL: Record<string, string> = {
   interesado: "Interesado",
@@ -73,7 +73,7 @@ export default function Page() {
           {clients.map((client) => (
             <li key={client._id}>
               <Link
-                href={`/clientes/${client._id}`}
+                href={`/clientes/${client._id}?from=p2`}
                 className="flex items-center justify-between gap-4 px-4 py-3"
               >
                 <span className="font-medium text-text-primary">

@@ -3,7 +3,7 @@
 import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { api } from "../../../../convex/_generated/api";
+import { api } from "../../../../../convex/_generated/api";
 
 const CHANNELS = [
   { value: "llamada", label: "Llamada" },
