@@ -66,7 +66,8 @@ export default defineSchema({
     createdAt: v.number(), // Date.now()
   })
     .index("by_saleStatus", ["saleStatus"])
-    .index("by_assignedAgent", ["assignedAgentId"]),
+    .index("by_assignedAgent", ["assignedAgentId"])
+    .index("by_createdAt", ["createdAt"]),
 
   // D2 — Contacto: one entry per call/WhatsApp/email/etc. Feeds the client's history.
   contacts: defineTable({

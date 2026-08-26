@@ -52,9 +52,11 @@ export const list = query({
     if (userId === null) {
       return [];
     }
-    const all = await ctx.db.query("clients").order("desc").collect();
+    const all = await ctx.db.query("clients").withIndex("by_createdAt").order("desc").collect();
     const term = args.search?.trim().toLowerCase();
-    const filtered = term
+    // Filtro por substring en memoria: Convex no soporta "contains" server-side
+    // sin un search index, que cambiaría la semántica de búsqueda.
+    return term
       ? all.filter(
           (c) =>
             c.name.toLowerCase().includes(term) ||
@@ -62,7 +64,6 @@ export const list = query({
             (c.email && c.email.toLowerCase().includes(term)),
         )
       : all;
-    return filtered.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 
