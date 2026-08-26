@@ -1,9 +1,17 @@
 "use client";
 
 import { useMutation } from "convex/react";
+import { ConvexError } from "convex/values";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { api } from "../../../../../convex/_generated/api";
+
+const KNOWN_SERVER_ERRORS = new Set([
+  "El nombre completo es obligatorio",
+  "Introduce al menos un teléfono o un correo electrónico",
+  "El teléfono no tiene un formato válido (9 dígitos, prefijo +34 opcional).",
+  "El correo electrónico no tiene un formato válido.",
+]);
 
 const CHANNELS = [
   { value: "llamada", label: "Llamada" },
@@ -49,8 +57,13 @@ export default function Page() {
         channel,
       });
       router.push(`/clientes/${id}`);
-    } catch {
-      setError("No se ha podido guardar el cliente. Inténtalo de nuevo.");
+    } catch (err) {
+      const data = err instanceof ConvexError ? err.data : undefined;
+      setError(
+        typeof data === "string" && KNOWN_SERVER_ERRORS.has(data)
+          ? data
+          : "No se ha podido guardar el cliente. Inténtalo de nuevo.",
+      );
       setIsSaving(false);
     }
   }

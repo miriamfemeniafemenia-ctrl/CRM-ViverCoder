@@ -1,10 +1,17 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 // D1 — Cliente. Alta básica (ARC-10/P4) y listado con buscador (ARC-9/P2).
 // Los campos ampliados de D1 (DNI, dirección, prioridad, agente asignado...)
 // quedan fuera de este alcance — ver ARC-48/ARC-31/ARC-49.
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^(?:\+34|0034)?[6789]\d{8}$/;
+
+function isValidPhone(value: string) {
+  return PHONE_RE.test(value.replace(/[\s\-.()]/g, ""));
+}
 
 export const create = mutation({
   args: {
@@ -28,10 +35,16 @@ export const create = mutation({
     const phone = args.phone?.trim() || undefined;
     const email = args.email?.trim() || undefined;
     if (!name) {
-      throw new Error("El nombre completo es obligatorio");
+      throw new ConvexError("El nombre completo es obligatorio");
     }
     if (!phone && !email) {
-      throw new Error("Introduce al menos un teléfono o un correo electrónico");
+      throw new ConvexError("Introduce al menos un teléfono o un correo electrónico");
+    }
+    if (phone && !isValidPhone(phone)) {
+      throw new ConvexError("El teléfono no tiene un formato válido (9 dígitos, prefijo +34 opcional).");
+    }
+    if (email && !EMAIL_RE.test(email)) {
+      throw new ConvexError("El correo electrónico no tiene un formato válido.");
     }
     return await ctx.db.insert("clients", {
       name,
