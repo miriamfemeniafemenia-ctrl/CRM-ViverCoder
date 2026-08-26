@@ -28,6 +28,7 @@ export default function Page() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
     setError(null);
 
     if (!name.trim()) {
