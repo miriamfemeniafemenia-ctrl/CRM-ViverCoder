@@ -50,3 +50,7 @@ convex/_generated
 
 # local-only prototype assets, not part of the repo history
 DOCUMENTOS/Prueba de prototipo — Oficina de Valencia.zip
+
+# scripts locales de un solo uso (rotación de claves/credenciales, etc.):
+# nunca se commitean, aunque no contengan secretos ellos mismos
+/TMP/
