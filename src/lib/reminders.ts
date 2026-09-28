@@ -13,6 +13,7 @@ const KNOWN_SERVER_ERRORS = new Set([
   "El cliente no existe",
   "El usuario asignado no existe",
   "El recordatorio no existe",
+  "El recordatorio ya está atendido",
 ]);
 
 export function reminderErrorMessage(err: unknown, fallback: string) {

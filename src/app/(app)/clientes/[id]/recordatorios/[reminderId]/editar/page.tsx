@@ -66,7 +66,7 @@ export default function Page({
           initialDate={reminder.date}
           initialNote={reminder.note}
           initialAssignedToId={reminder.assignedToId}
-          originalDate={reminder.date}
+          originalDate={liveReminder?.date ?? reminder.date}
           submitLabel="Guardar cambios"
           onSubmit={async ({ date, note, assignedToId }) => {
             await updateReminder({ id: reminder._id, date, note, assignedToId });

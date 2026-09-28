@@ -173,7 +173,7 @@ export function ReminderForm({
         </button>
         <button
           type="submit"
-          disabled={isSaving || !currentUser || !users}
+          disabled={isSaving || !users || (!initialAssignedToId && !currentUser)}
           className="flex h-12 items-center justify-center rounded-md bg-primary-500 px-5 font-medium text-on-brand disabled:opacity-60"
         >
           {isSaving ? "Guardando…" : submitLabel}

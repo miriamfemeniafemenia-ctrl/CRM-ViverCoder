@@ -24,16 +24,12 @@ const iconButtonClass =
 // de un <ul>. La fila no es clicable; solo lápiz (edita) y papelera (elimina,
 // con confirmación en la propia fila). "Marcar como hecho" es ARC-62.
 export function ReminderItem({
-  clientName,
   date,
   note,
   assignedTo,
   editHref,
   onDelete,
 }: {
-  // `undefined` no muestra título (P3, ya dentro de la ficha del cliente);
-  // `null` es un cliente que ya no existe.
-  clientName?: string | null;
   date: string;
   note: string;
   assignedTo?: string;
@@ -70,11 +66,6 @@ export function ReminderItem({
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center justify-between gap-4">
-            {clientName !== undefined && (
-              <span className="truncate font-medium text-text-primary">
-                {clientName ?? "Cliente no disponible"}
-              </span>
-            )}
             <span className="whitespace-nowrap text-xs text-text-tertiary">
               {new Date(`${date}T00:00:00`).toLocaleDateString("es-ES")}
               {assignedTo ? ` · ${assignedTo}` : ""}
