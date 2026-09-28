@@ -19,7 +19,7 @@ const iconProps = {
 const iconButtonClass =
   "inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary hover:bg-surface-sunken";
 
-// Fila de recordatorio de P1 y P3 (ARC-61), portada de
+// Fila de recordatorio de P3 (ARC-61), portada de
 // `lists/ReminderItem` del sistema de diseño. Devuelve un <li>: se usa dentro
 // de un <ul>. La fila no es clicable; solo lápiz (edita) y papelera (elimina,
 // con confirmación en la propia fila). "Marcar como hecho" es ARC-62.

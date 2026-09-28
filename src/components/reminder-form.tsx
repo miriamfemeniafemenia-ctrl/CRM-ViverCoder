@@ -47,8 +47,14 @@ export function ReminderForm({
   const [assignedToIdOverride, setAssignedToIdOverride] = useState<
     Id<"users"> | ""
   >("");
-  const assignedToId =
+  const candidateAssignedToId =
     assignedToIdOverride || initialAssignedToId || currentUser?._id || "";
+  // Si el asignado ya no está en la lista (usuario eliminado) no se preselecciona:
+  // el select muestra "Selecciona…" y el guardado pide elegir a alguien.
+  const assignedToId =
+    users && !users.some((u) => u._id === candidateAssignedToId)
+      ? ""
+      : candidateAssignedToId;
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -140,6 +146,7 @@ export function ReminderForm({
           className="h-12 w-full rounded-md border border-border-default bg-surface-card px-3 text-text-primary outline-none focus:border-primary-500 disabled:bg-neutral-100 disabled:text-text-tertiary"
         >
           {!users && <option value="">Cargando…</option>}
+          {users && !assignedToId && <option value="">Selecciona…</option>}
           {users?.map((option) => (
             <option key={option._id} value={option._id}>
               {option.name}

@@ -108,14 +108,17 @@ export const create = mutation({
   },
 });
 
+// `id` llega de la URL: se normaliza para que uno mal escrito o de otra tabla
+// devuelva null (pantalla "no se encontró") en vez de lanzar un error.
 export const get = query({
-  args: { id: v.id("reminders") },
+  args: { id: v.string() },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
       return null;
     }
-    return await ctx.db.get(args.id);
+    const id = ctx.db.normalizeId("reminders", args.id);
+    return id === null ? null : await ctx.db.get(id);
   },
 });
 
@@ -176,34 +179,6 @@ export const remove = mutation({
       return;
     }
     await ctx.db.delete(args.id);
-  },
-});
-
-// P1 — recordatorios pendientes de quien está conectado, con el nombre del
-// cliente. Volumen esperado: unas decenas de pendientes por usuario (3
-// usuarios); cada carga lee y ordena por fecha todos los suyos. Si crece, añadir
-// el índice ["assignedToId", "status", "date"] y paginar.
-export const listPendingByAssignee = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      return [];
-    }
-    const reminders = await ctx.db
-      .query("reminders")
-      .withIndex("by_assignedTo_status", (q) =>
-        q.eq("assignedToId", userId).eq("status", "pendiente"),
-      )
-      .collect();
-    const clientIds = [...new Set(reminders.map((r) => r.clientId))];
-    const clients = await Promise.all(clientIds.map((id) => ctx.db.get(id)));
-    const clientNameById = new Map(
-      clientIds.map((id, i) => [id, clients[i]?.name ?? null]),
-    );
-    return reminders
-      .map((r) => ({ ...r, clientName: clientNameById.get(r.clientId) ?? null }))
-      .sort((a, b) => a.date.localeCompare(b.date));
   },
 });
 

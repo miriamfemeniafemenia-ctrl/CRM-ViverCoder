@@ -6,34 +6,21 @@ import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { ReminderForm } from "@/components/reminder-form";
 import { api } from "../../../../../../../../convex/_generated/api";
-import { Doc, Id } from "../../../../../../../../convex/_generated/dataModel";
-
-// Destino de "volver" según el origen (?from=). Solo P1 lo añade; sin él (o con
-// un valor desconocido) se vuelve a la ficha del cliente, que es desde donde
-// se abre en P3.
-const BACK_DESTINATION_BY_ORIGIN: Record<string, string> = {
-  p1: "/",
-};
+import { Doc } from "../../../../../../../../convex/_generated/dataModel";
 
 // /clientes/[id]/recordatorios/[reminderId]/editar — "Nuevo recordatorio" en
-// modo edición (ARC-61), abierto desde P1 o P3. Se puede guardar sin cambiar
-// una fecha ya vencida.
+// modo edición (ARC-61), abierto desde P3. Se puede guardar sin cambiar una
+// fecha ya vencida.
 export default function Page({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string; reminderId: string }>;
-  searchParams: Promise<{ from?: string }>;
 }) {
   const { id, reminderId } = use(params);
-  const { from } = use(searchParams);
   const router = useRouter();
-  const clientHref = `/clientes/${id}`;
-  const backHref = (from && BACK_DESTINATION_BY_ORIGIN[from]) || clientHref;
+  const backHref = `/clientes/${id}`;
 
-  const liveReminder = useQuery(api.reminders.get, {
-    id: reminderId as Id<"reminders">,
-  });
+  const liveReminder = useQuery(api.reminders.get, { id: reminderId });
   // Copia de lo cargado la primera vez: si otra sesión borra el recordatorio
   // con el formulario abierto, no se desmonta y el guardado devuelve el error
   // "El recordatorio no existe" en vez de perder lo escrito.
