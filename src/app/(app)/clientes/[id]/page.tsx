@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { use } from "react";
+import { ReminderItem } from "@/components/reminder-item";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 
@@ -32,11 +33,11 @@ const DEFAULT_BACK_LABEL = "← Clientes";
 
 // /clientes/[id] — P3, ficha de cliente. Muestra por ahora los datos básicos
 // del alta (ARC-10/ARC-9) y una lista mínima de recordatorios pendientes
-// (ARC-60, alta con asignación). La sección completa de F5 (vencidos
-// destacados, marcar como hecho) es ARC-16; el resto de funciones de la
-// ficha (F3, F4, F7, F8, F10 — historial, siniestros, pólizas...) siguen
-// pendientes: ARC-12, ARC-14, ARC-18, ARC-19, ARC-21, ARC-33, ARC-50,
-// ARC-52, ARC-56.
+// (ARC-60, alta con asignación; ARC-61, editar y eliminar). La sección
+// completa de F5 (vencidos destacados, marcar como hecho) es ARC-16; el resto
+// de funciones de la ficha (F3, F4, F7, F8, F10 — historial, siniestros,
+// pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-18, ARC-19, ARC-21,
+// ARC-33, ARC-50, ARC-52, ARC-56.
 export default function Page({
   params,
   searchParams,
@@ -52,6 +53,7 @@ export default function Page({
   const pendingReminders = useQuery(api.reminders.listPendingByClient, {
     clientId,
   });
+  const removeReminder = useMutation(api.reminders.remove);
   const users = useQuery(api.users.list);
   const userNameById = new Map((users ?? []).map((u) => [u._id, u.name]));
 
@@ -132,20 +134,14 @@ export default function Page({
         ) : (
           <ul className="flex flex-col gap-3 text-sm">
             {pendingReminders.map((reminder) => (
-              <li
+              <ReminderItem
                 key={reminder._id}
-                className="border-border-default flex flex-col gap-1 rounded-md border px-4 py-3"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-text-primary font-medium">
-                    {new Date(`${reminder.date}T00:00:00`).toLocaleDateString("es-ES")}
-                  </span>
-                  <span className="text-text-tertiary text-xs">
-                    Asignado a {userNameById.get(reminder.assignedToId) ?? "—"}
-                  </span>
-                </div>
-                <p className="text-text-secondary">{reminder.note}</p>
-              </li>
+                date={reminder.date}
+                note={reminder.note}
+                assignedTo={userNameById.get(reminder.assignedToId) ?? "—"}
+                editHref={`/clientes/${clientId}/recordatorios/${reminder._id}/editar`}
+                onDelete={() => removeReminder({ id: reminder._id })}
+              />
             ))}
           </ul>
         )}
