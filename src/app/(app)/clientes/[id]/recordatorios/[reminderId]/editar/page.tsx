@@ -16,10 +16,13 @@ export default function Page({
   searchParams,
 }: {
   params: Promise<{ id: string; reminderId: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const { id, reminderId } = use(params);
-  const { from } = use(searchParams);
+  // Next entrega `string | string[] | undefined` (un parámetro repetido en
+  // la URL da un array); nos quedamos con el primer valor.
+  const rawFrom = use(searchParams).from;
+  const from = Array.isArray(rawFrom) ? rawFrom[0] : rawFrom;
   const router = useRouter();
   const clientHref = `/clientes/${id}`;
   // Comparación directa, sin un Record indexado por `from`: una clave como
