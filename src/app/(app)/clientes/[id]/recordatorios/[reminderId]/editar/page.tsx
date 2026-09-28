@@ -9,16 +9,26 @@ import { api } from "../../../../../../../../convex/_generated/api";
 import { Doc } from "../../../../../../../../convex/_generated/dataModel";
 
 // /clientes/[id]/recordatorios/[reminderId]/editar — "Nuevo recordatorio" en
-// modo edición (ARC-61), abierto desde P3. Se puede guardar sin cambiar una
-// fecha ya vencida.
+// modo edición (ARC-61), abierto desde P3 o P1 (ARC-70, ?from=p1). Se puede
+// guardar sin cambiar una fecha ya vencida.
 export default function Page({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; reminderId: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const { id, reminderId } = use(params);
+  // Next entrega `string | string[] | undefined` (un parámetro repetido en
+  // la URL da un array); nos quedamos con el primer valor.
+  const rawFrom = use(searchParams).from;
+  const from = Array.isArray(rawFrom) ? rawFrom[0] : rawFrom;
   const router = useRouter();
-  const backHref = `/clientes/${id}`;
+  const clientHref = `/clientes/${id}`;
+  // Comparación directa, sin un Record indexado por `from`: una clave como
+  // "constructor" en un Record cae en Object.prototype y backHref deja de ser
+  // un string (bug real en la primera versión de este archivo, ARC-61).
+  const backHref = from === "p1" ? "/" : clientHref;
 
   const liveReminder = useQuery(api.reminders.get, { id: reminderId });
   // Copia de lo cargado la primera vez: si otra sesión borra el recordatorio

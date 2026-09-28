@@ -4,8 +4,8 @@ import { Id } from "./_generated/dataModel";
 import { mutation, query, QueryCtx } from "./_generated/server";
 
 // D3 — Recordatorio. Alta desde la sub-pantalla "Nuevo recordatorio" (ARC-15)
-// con asignación a un usuario del equipo (ARC-60), y edición/borrado desde P1
-// y P3 (ARC-61). El resto de F5 (marcar como hecho, filtros, pestaña
+// con asignación a un usuario del equipo (ARC-60), y edición/borrado desde P3
+// (ARC-61) y P1 (ARC-70). El resto de F5 (marcar como hecho, filtros, pestaña
 // "Próximas"...) queda fuera de este alcance — ver ARC-62, ARC-63, ARC-65.
 //
 // Reglas de negocio:
@@ -197,6 +197,37 @@ export const remove = mutation({
       throw userError("El recordatorio ya está atendido");
     }
     await ctx.db.delete(args.id);
+  },
+});
+
+// P1 — recordatorios pendientes de quien está conectado, con el nombre del
+// cliente. Sin filtrar por fecha (vencidos, de hoy y futuros): el corte por
+// "hoy" es ARC-63, la pestaña "Próximas" es ARC-62, ninguno de los dos entra
+// en este ticket. userId siempre sale de la sesión (getAuthUserId), nunca de
+// un argumento — no hay forma de pedir la lista de otra persona.
+// Volumen esperado: unas decenas de pendientes por usuario (3 cuentas fijas
+// en total, sin alta pública — ver convex/auth.ts). Si crece, sustituir
+// by_assignedTo_status por un índice ["assignedToId", "status", "date"] y
+// paginar con .paginate() (no es solo "añadir date": es un índice nuevo).
+export const listPendingByAssignee = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const reminders = await ctx.db
+      .query("reminders")
+      .withIndex("by_assignedTo_status", (q) =>
+        q.eq("assignedToId", userId).eq("status", "pendiente"),
+      )
+      .collect();
+    const clientIds = [...new Set(reminders.map((r) => r.clientId))];
+    const clients = await Promise.all(clientIds.map((id) => ctx.db.get(id)));
+    const clientNameById = new Map(
+      clientIds.map((id, i) => [id, clients[i]?.name ?? null]),
+    );
+    return reminders
+      .map((r) => ({ ...r, clientName: clientNameById.get(r.clientId) ?? null }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a._id.localeCompare(b._id));
   },
 });
 
