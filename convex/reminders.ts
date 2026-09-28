@@ -64,8 +64,8 @@ function isValidISODate(value: string) {
 }
 
 // Reglas de nota y fecha compartidas por `create` y `update`. Devuelve la nota
-// ya recortada. Los textos de error están espejados en `KNOWN_SERVER_ERRORS`
-// (src/lib/reminders.ts).
+// ya recortada. Todo `ConvexError` de texto de este archivo se muestra tal cual
+// al usuario (src/lib/reminders.ts): debe estar redactado para él.
 function validateNoteAndDate(rawNote: string, date: string) {
   const note = rawNote.trim();
   if (!note) {
@@ -184,6 +184,11 @@ export const remove = mutation({
     const reminder = await ctx.db.get(args.id);
     if (!reminder) {
       return;
+    }
+    // Igual que `update`: un recordatorio ya atendido es historial de trabajo
+    // hecho y no se borra desde P3.
+    if (reminder.status !== "pendiente") {
+      throw new ConvexError("El recordatorio ya está atendido");
     }
     await ctx.db.delete(args.id);
   },

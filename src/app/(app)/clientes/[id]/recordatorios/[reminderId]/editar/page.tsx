@@ -66,7 +66,10 @@ export default function Page({
           initialDate={reminder.date}
           initialNote={reminder.note}
           initialAssignedToId={reminder.assignedToId}
-          originalDate={liveReminder?.date ?? reminder.date}
+          // Misma copia que `initialDate`: el formulario comprueba la fecha que
+          // ve el usuario. Si otra sesión la cambia con el formulario abierto,
+          // el servidor compara con la fecha actual y puede rechazar el guardado.
+          originalDate={reminder.date}
           submitLabel="Guardar cambios"
           onSubmit={async ({ date, note, assignedToId }) => {
             await updateReminder({ id: reminder._id, date, note, assignedToId });

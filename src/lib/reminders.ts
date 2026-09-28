@@ -2,25 +2,12 @@ import { ConvexError } from "convex/values";
 
 export const NOTE_MAX_LENGTH = 500;
 
-// Textos exactos con los que convex/reminders.ts lanza ConvexError. Si se
-// añade o cambia uno allí, tocarlo aquí: el formulario y ReminderItem solo
-// muestran mensajes de esta lista y el resto cae en un mensaje genérico.
-const KNOWN_SERVER_ERRORS = new Set([
-  "La nota es obligatoria",
-  `La nota es demasiado larga (máximo ${NOTE_MAX_LENGTH} caracteres).`,
-  "La fecha no es válida",
-  "La fecha de seguimiento no puede ser anterior a hoy",
-  "El cliente no existe",
-  "El usuario asignado no existe",
-  "El recordatorio no existe",
-  "El recordatorio ya está atendido",
-]);
-
+// Todo `ConvexError` de texto lanzado por convex/reminders.ts está redactado
+// para el usuario, así que se muestra tal cual; cualquier otro error (red,
+// "No autenticado", fallos inesperados) cae en el mensaje genérico.
 export function reminderErrorMessage(err: unknown, fallback: string) {
   const data = err instanceof ConvexError ? err.data : undefined;
-  return typeof data === "string" && KNOWN_SERVER_ERRORS.has(data)
-    ? data
-    : fallback;
+  return typeof data === "string" ? data : fallback;
 }
 
 // Duplicada (con la misma lógica) en convex/reminders.ts: Convex solo
