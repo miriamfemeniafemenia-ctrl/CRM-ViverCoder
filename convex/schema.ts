@@ -132,11 +132,7 @@ export default defineSchema({
     type: v.string(),
     insurer: v.string(),
     policyNumber: v.string(),
-    status: v.union(
-      v.literal("activa"),
-      v.literal("reemplazada"),
-      v.literal("anulada"),
-    ),
+    status: v.union(v.literal("activa"), v.literal("reemplazada"), v.literal("anulada")),
     createdAt: v.number(),
   }).index("by_client", ["clientId"]),
 });

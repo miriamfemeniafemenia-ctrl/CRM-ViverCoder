@@ -47,8 +47,7 @@ export default function Page({
 }) {
   const { id } = use(params);
   const { from } = use(searchParams);
-  const backHref =
-    (from && BACK_DESTINATION_BY_ORIGIN[from]) || DEFAULT_BACK_DESTINATION;
+  const backHref = (from && BACK_DESTINATION_BY_ORIGIN[from]) || DEFAULT_BACK_DESTINATION;
   const clientId = id as Id<"clients">;
   const client = useQuery(api.clients.get, { id: clientId });
   const pendingReminders = useQuery(api.reminders.listPendingByClient, {
@@ -61,7 +60,7 @@ export default function Page({
   if (client === undefined) {
     return (
       <div className="flex min-h-full flex-1 flex-col p-6">
-        <p className="text-sm text-text-tertiary">Cargando…</p>
+        <p className="text-text-tertiary text-sm">Cargando…</p>
       </div>
     );
   }
@@ -69,10 +68,8 @@ export default function Page({
   if (client === null) {
     return (
       <div className="flex min-h-full flex-1 flex-col gap-3 p-6">
-        <p className="text-sm text-text-secondary">
-          No se encontró este cliente.
-        </p>
-        <Link href="/clientes" className="text-sm text-text-link">
+        <p className="text-text-secondary text-sm">No se encontró este cliente.</p>
+        <Link href="/clientes" className="text-text-link text-sm">
           Volver a la lista de clientes
         </Link>
       </div>
@@ -81,16 +78,14 @@ export default function Page({
 
   return (
     <div className="flex min-h-full flex-1 flex-col p-6">
-      <Link href={backHref} className="mb-4 text-sm text-text-link">
+      <Link href={backHref} className="text-text-link mb-4 text-sm">
         {DEFAULT_BACK_LABEL}
       </Link>
 
-      <div className="max-w-lg rounded-lg border border-border-default bg-surface-card p-6 shadow-sm">
+      <div className="border-border-default bg-surface-card max-w-lg rounded-lg border p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-semibold text-text-primary">
-            {client.name}
-          </h1>
-          <span className="rounded-pill bg-sale-interesado-bg px-3 py-1 text-xs font-medium text-sale-interesado-fg">
+          <h1 className="text-text-primary text-2xl font-semibold">{client.name}</h1>
+          <span className="rounded-pill bg-sale-interesado-bg text-sale-interesado-fg px-3 py-1 text-xs font-medium">
             {SALE_STATUS_LABEL[client.saleStatus]}
           </span>
         </div>
@@ -106,9 +101,7 @@ export default function Page({
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-text-tertiary">Canal de entrada</dt>
-            <dd className="text-text-primary">
-              {CHANNEL_LABEL[client.channel]}
-            </dd>
+            <dd className="text-text-primary">{CHANNEL_LABEL[client.channel]}</dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-text-tertiary">Fecha de alta</dt>
@@ -119,23 +112,23 @@ export default function Page({
         </dl>
       </div>
 
-      <div className="mt-4 max-w-lg rounded-lg border border-border-default bg-surface-card p-6 shadow-sm">
+      <div className="border-border-default bg-surface-card mt-4 max-w-lg rounded-lg border p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold text-text-primary">
+          <h2 className="text-text-primary text-lg font-semibold">
             Recordatorios pendientes
           </h2>
           <Link
             href={`/clientes/${clientId}/recordatorios/nuevo`}
-            className="flex h-10 items-center justify-center rounded-md bg-primary-500 px-4 text-sm font-medium text-on-brand"
+            className="bg-primary-500 text-on-brand flex h-10 items-center justify-center rounded-md px-4 text-sm font-medium"
           >
             Nuevo recordatorio
           </Link>
         </div>
 
         {pendingReminders === undefined ? (
-          <p className="text-sm text-text-tertiary">Cargando…</p>
+          <p className="text-text-tertiary text-sm">Cargando…</p>
         ) : pendingReminders.length === 0 ? (
-          <p className="text-sm text-text-secondary">
+          <p className="text-text-secondary text-sm">
             No hay recordatorios pendientes para este cliente.
           </p>
         ) : (

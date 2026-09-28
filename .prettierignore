@@ -1,0 +1,7 @@
+# No se formatea: documentación de diseño, lockfile, código generado y worktrees.
+DOCUMENTOS/
+package-lock.json
+convex/_generated/
+.next/
+.claude/
+*.md

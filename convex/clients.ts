@@ -41,7 +41,9 @@ export const create = mutation({
       throw new ConvexError("Introduce al menos un teléfono o un correo electrónico");
     }
     if (phone && !isValidPhone(phone)) {
-      throw new ConvexError("El teléfono no tiene un formato válido (9 dígitos, prefijo +34 opcional).");
+      throw new ConvexError(
+        "El teléfono no tiene un formato válido (9 dígitos, prefijo +34 opcional).",
+      );
     }
     if (email && !EMAIL_RE.test(email)) {
       throw new ConvexError("El correo electrónico no tiene un formato válido.");
@@ -65,7 +67,11 @@ export const list = query({
     if (userId === null) {
       return [];
     }
-    const all = await ctx.db.query("clients").withIndex("by_createdAt").order("desc").collect();
+    const all = await ctx.db
+      .query("clients")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .collect();
     const term = args.search?.trim().toLowerCase();
     // Filtro por substring en memoria: Convex no soporta "contains" server-side
     // sin un search index, que cambiaría la semántica de búsqueda.

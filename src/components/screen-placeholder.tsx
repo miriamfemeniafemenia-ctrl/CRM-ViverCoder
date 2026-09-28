@@ -17,14 +17,13 @@ export function ScreenPlaceholder({
 }) {
   return (
     <div className="flex min-h-full flex-1 flex-col gap-2 p-6">
-      <p className="text-xs font-medium tracking-wide text-text-tertiary uppercase">
+      <p className="text-text-tertiary text-xs font-medium tracking-wide uppercase">
         {functions}
         {ticket ? ` · ${ticket}` : ""}
       </p>
-      <h1 className="text-2xl font-semibold text-text-primary">{screen}</h1>
-      <p className="text-sm text-text-secondary">
-        Pantalla pendiente de construir contra el design system Oficina de
-        Valencia.
+      <h1 className="text-text-primary text-2xl font-semibold">{screen}</h1>
+      <p className="text-text-secondary text-sm">
+        Pantalla pendiente de construir contra el design system Oficina de Valencia.
       </p>
       {children}
     </div>

@@ -62,26 +62,26 @@ export function ReminderItem({
   }
 
   return (
-    <li className="flex flex-col gap-1 rounded-md border border-border-default px-4 py-3">
+    <li className="border-border-default flex flex-col gap-1 rounded-md border px-4 py-3">
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center justify-between gap-4">
-            <span className="font-medium text-text-primary">
+            <span className="text-text-primary font-medium">
               {new Date(`${date}T00:00:00`).toLocaleDateString("es-ES")}
             </span>
-            <span className="text-xs text-text-tertiary">Asignado a {assignedTo}</span>
+            <span className="text-text-tertiary text-xs">Asignado a {assignedTo}</span>
           </div>
           <p className="text-text-secondary">{note}</p>
         </div>
 
         {confirming ? (
           <div className="flex items-center gap-4">
-            <span className="text-xs text-text-secondary">¿Eliminar?</span>
+            <span className="text-text-secondary text-xs">¿Eliminar?</span>
             <button
               type="button"
               onClick={handleConfirmDelete}
               disabled={isDeleting}
-              className="relative h-7 rounded-md bg-primary-500 px-3 text-xs font-medium text-on-brand before:absolute before:-inset-y-2 before:inset-x-0 disabled:opacity-60"
+              className="bg-primary-500 text-on-brand relative h-7 rounded-md px-3 text-xs font-medium before:absolute before:inset-x-0 before:-inset-y-2 disabled:opacity-60"
             >
               Sí
             </button>
@@ -92,7 +92,7 @@ export function ReminderItem({
                 setError(null);
               }}
               disabled={isDeleting}
-              className="relative h-7 rounded-md border border-border-default px-3 text-xs font-medium text-text-primary before:absolute before:-inset-y-2 before:inset-x-0 disabled:opacity-60"
+              className="border-border-default text-text-primary relative h-7 rounded-md border px-3 text-xs font-medium before:absolute before:inset-x-0 before:-inset-y-2 disabled:opacity-60"
             >
               No
             </button>
@@ -125,9 +125,9 @@ export function ReminderItem({
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 rounded-md border border-warning-border bg-warning-bg px-3 py-2">
+        <div className="border-warning-border bg-warning-bg flex items-start gap-2 rounded-md border px-3 py-2">
           <span className="text-warning-fg">⚠</span>
-          <span className="text-xs text-warning-fg">{error}</span>
+          <span className="text-warning-fg text-xs">{error}</span>
         </div>
       )}
     </li>

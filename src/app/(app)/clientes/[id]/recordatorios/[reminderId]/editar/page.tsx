@@ -24,9 +24,7 @@ export default function Page({
   // Copia de lo cargado la primera vez: si otra sesión borra el recordatorio
   // con el formulario abierto, no se desmonta y el guardado devuelve el error
   // "El recordatorio no existe" en vez de perder lo escrito.
-  const [loadedReminder, setLoadedReminder] = useState<Doc<"reminders"> | null>(
-    null,
-  );
+  const [loadedReminder, setLoadedReminder] = useState<Doc<"reminders"> | null>(null);
   if (liveReminder && !loadedReminder) {
     setLoadedReminder(liveReminder);
   }
@@ -36,7 +34,7 @@ export default function Page({
   if (reminder === undefined) {
     return (
       <div className="flex min-h-full flex-1 flex-col p-6">
-        <p className="text-sm text-text-tertiary">Cargando…</p>
+        <p className="text-text-tertiary text-sm">Cargando…</p>
       </div>
     );
   }
@@ -45,10 +43,8 @@ export default function Page({
   if (reminder === null || reminder.clientId !== id) {
     return (
       <div className="flex min-h-full flex-1 flex-col gap-3 p-6">
-        <p className="text-sm text-text-secondary">
-          No se encontró este recordatorio.
-        </p>
-        <Link href={backHref} className="text-sm text-text-link">
+        <p className="text-text-secondary text-sm">No se encontró este recordatorio.</p>
+        <Link href={backHref} className="text-text-link text-sm">
           Volver
         </Link>
       </div>
@@ -58,7 +54,7 @@ export default function Page({
   return (
     <div className="flex min-h-full flex-1 flex-col items-center p-6">
       <div className="w-full max-w-lg">
-        <h1 className="mb-6 text-2xl font-semibold text-text-primary">
+        <h1 className="text-text-primary mb-6 text-2xl font-semibold">
           Editar recordatorio
         </h1>
 

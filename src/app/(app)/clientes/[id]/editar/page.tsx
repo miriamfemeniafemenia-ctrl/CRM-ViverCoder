@@ -1,11 +1,7 @@
 import { ScreenPlaceholder } from "@/components/screen-placeholder";
 
 // /clientes/[id]/editar — P4 en modo edición. Siempre cierra hacia P3 (regla de navegación del PRD).
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
     <ScreenPlaceholder
