@@ -2,12 +2,16 @@ import { ConvexError } from "convex/values";
 
 export const NOTE_MAX_LENGTH = 500;
 
-// Todo `ConvexError` de texto lanzado por convex/reminders.ts está redactado
-// para el usuario, así que se muestra tal cual; cualquier otro error (red,
-// "No autenticado", fallos inesperados) cae en el mensaje genérico.
+// Los errores pensados para el usuario llegan como `ConvexError({ userMessage })`
+// (ver `userError` en convex/reminders.ts) y se muestran tal cual. Cualquier
+// otro (red, "No autenticado", fallos inesperados) cae en el mensaje genérico.
 export function reminderErrorMessage(err: unknown, fallback: string) {
-  const data = err instanceof ConvexError ? err.data : undefined;
-  return typeof data === "string" ? data : fallback;
+  const data: unknown = err instanceof ConvexError ? err.data : undefined;
+  if (typeof data === "object" && data !== null && "userMessage" in data) {
+    const { userMessage } = data;
+    if (typeof userMessage === "string") return userMessage;
+  }
+  return fallback;
 }
 
 // Duplicada (con la misma lógica) en convex/reminders.ts: Convex solo

@@ -17,13 +17,13 @@ export type ReminderFormValues = {
 };
 
 // Formulario compartido por "Nuevo recordatorio" (ARC-15/ARC-60) y "Editar
-// recordatorio" (ARC-61). `originalDate` solo se pasa en edición: mientras la
+// recordatorio" (ARC-61). `isEdit` solo se pasa en edición: mientras la
 // fecha no cambie se acepta aunque ya esté vencida.
 export function ReminderForm({
   initialDate = "",
   initialNote = "",
   initialAssignedToId,
-  originalDate,
+  isEdit = false,
   submitLabel,
   onSubmit,
   onCancel,
@@ -31,7 +31,7 @@ export function ReminderForm({
   initialDate?: string;
   initialNote?: string;
   initialAssignedToId?: Id<"users">;
-  originalDate?: string;
+  isEdit?: boolean;
   submitLabel: string;
   onSubmit: (values: ReminderFormValues) => Promise<void>;
   onCancel: () => void;
@@ -60,6 +60,7 @@ export function ReminderForm({
   // vencida — con un `min` posterior a ella el navegador bloquearía el
   // guardado de una nota sin tocar la fecha.
   const today = todayISODateMadrid();
+  const originalDate = isEdit ? initialDate : undefined;
   const minDate =
     originalDate !== undefined && originalDate < today ? originalDate : today;
   const [isSaving, setIsSaving] = useState(false);

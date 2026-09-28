@@ -63,34 +63,40 @@ function isValidISODate(value: string) {
   );
 }
 
+// Error con texto para el usuario: el cliente solo muestra los que llevan
+// `userMessage` (src/lib/reminders.ts); cualquier otro error, o un ConvexError
+// sin esa forma, cae en un mensaje genérico.
+function userError(userMessage: string) {
+  return new ConvexError({ userMessage });
+}
+
 // Reglas de nota y fecha compartidas por `create` y `update`. Devuelve la nota
-// ya recortada. Todo `ConvexError` de texto de este archivo se muestra tal cual
-// al usuario (src/lib/reminders.ts): debe estar redactado para él.
+// ya recortada.
 function validateNoteAndDate(rawNote: string, date: string) {
   const note = rawNote.trim();
   if (!note) {
-    throw new ConvexError("La nota es obligatoria");
+    throw userError("La nota es obligatoria");
   }
   if (note.length > NOTE_MAX_LENGTH) {
-    throw new ConvexError(
+    throw userError(
       `La nota es demasiado larga (máximo ${NOTE_MAX_LENGTH} caracteres).`,
     );
   }
   if (!isValidISODate(date)) {
-    throw new ConvexError("La fecha no es válida");
+    throw userError("La fecha no es válida");
   }
   return note;
 }
 
 function assertNotPastDate(date: string) {
   if (date < todayISODateMadrid()) {
-    throw new ConvexError("La fecha de seguimiento no puede ser anterior a hoy");
+    throw userError("La fecha de seguimiento no puede ser anterior a hoy");
   }
 }
 
 async function assertAssigneeExists(ctx: QueryCtx, assignedToId: Id<"users">) {
   if (!(await ctx.db.get(assignedToId))) {
-    throw new ConvexError("El usuario asignado no existe");
+    throw userError("El usuario asignado no existe");
   }
 }
 
@@ -110,7 +116,7 @@ export const create = mutation({
     assertNotPastDate(args.date);
     const client = await ctx.db.get(args.clientId);
     if (!client) {
-      throw new ConvexError("El cliente no existe");
+      throw userError("El cliente no existe");
     }
     await assertAssigneeExists(ctx, args.assignedToId);
     return await ctx.db.insert("reminders", {
@@ -155,10 +161,10 @@ export const update = mutation({
     const note = validateNoteAndDate(args.note, args.date);
     const reminder = await ctx.db.get(args.id);
     if (!reminder) {
-      throw new ConvexError("El recordatorio no existe");
+      throw userError("El recordatorio no existe");
     }
     if (reminder.status !== "pendiente") {
-      throw new ConvexError("El recordatorio ya está atendido");
+      throw userError("El recordatorio ya está atendido");
     }
     // Un recordatorio vencido se puede editar sin obligar a cambiar su fecha:
     // solo una fecha nueva tiene que ser de hoy en adelante.
@@ -188,7 +194,7 @@ export const remove = mutation({
     // Igual que `update`: un recordatorio ya atendido es historial de trabajo
     // hecho y no se borra desde P3.
     if (reminder.status !== "pendiente") {
-      throw new ConvexError("El recordatorio ya está atendido");
+      throw userError("El recordatorio ya está atendido");
     }
     await ctx.db.delete(args.id);
   },
