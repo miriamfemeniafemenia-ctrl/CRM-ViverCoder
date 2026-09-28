@@ -56,6 +56,12 @@ export function ReminderForm({
       ? ""
       : candidateAssignedToId;
   const [error, setError] = useState<string | null>(null);
+  // Alta: desde hoy. Edición: desde hoy, o desde la fecha original si ya está
+  // vencida — con un `min` posterior a ella el navegador bloquearía el
+  // guardado de una nota sin tocar la fecha.
+  const today = todayISODateMadrid();
+  const minDate =
+    originalDate !== undefined && originalDate < today ? originalDate : today;
   const [isSaving, setIsSaving] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -113,7 +119,7 @@ export function ReminderForm({
         <input
           type="date"
           value={date}
-          min={originalDate === undefined ? todayISODateMadrid() : undefined}
+          min={minDate}
           onChange={(event) => setDate(event.target.value)}
           disabled={isSaving}
           className="h-12 w-full rounded-md border border-border-default px-3 text-text-primary outline-none focus:border-primary-500 disabled:bg-neutral-100 disabled:text-text-tertiary"

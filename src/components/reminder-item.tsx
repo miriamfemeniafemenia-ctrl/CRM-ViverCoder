@@ -32,7 +32,7 @@ export function ReminderItem({
 }: {
   date: string;
   note: string;
-  assignedTo?: string;
+  assignedTo: string;
   editHref: string;
   // Rechaza si falla; el valor con el que resuelve no importa (una mutation de
   // Convex sin retorno resuelve a `null`).
@@ -62,14 +62,14 @@ export function ReminderItem({
   }
 
   return (
-    <li className="flex flex-col gap-2 rounded-md border border-border-default px-4 py-3">
+    <li className="flex flex-col gap-1 rounded-md border border-border-default px-4 py-3">
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center justify-between gap-4">
-            <span className="whitespace-nowrap text-xs text-text-tertiary">
+            <span className="font-medium text-text-primary">
               {new Date(`${date}T00:00:00`).toLocaleDateString("es-ES")}
-              {assignedTo ? ` · ${assignedTo}` : ""}
             </span>
+            <span className="text-xs text-text-tertiary">Asignado a {assignedTo}</span>
           </div>
           <p className="text-text-secondary">{note}</p>
         </div>
