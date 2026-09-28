@@ -17,7 +17,7 @@ const iconProps = {
 } as const;
 
 const iconButtonClass =
-  "inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary hover:bg-surface-sunken";
+  "relative inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary before:absolute before:-inset-1 hover:bg-surface-sunken";
 
 // Fila de recordatorio de P3 (ARC-61), portada de
 // `lists/ReminderItem` del sistema de diseño. Devuelve un <li>: se usa dentro
@@ -75,13 +75,13 @@ export function ReminderItem({
         </div>
 
         {confirming ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             <span className="text-xs text-text-secondary">¿Eliminar?</span>
             <button
               type="button"
               onClick={handleConfirmDelete}
               disabled={isDeleting}
-              className="h-7 rounded-md bg-primary-500 px-3 text-xs font-medium text-on-brand disabled:opacity-60"
+              className="relative h-7 rounded-md bg-primary-500 px-3 text-xs font-medium text-on-brand before:absolute before:-inset-y-2 before:inset-x-0 disabled:opacity-60"
             >
               Sí
             </button>
@@ -92,13 +92,13 @@ export function ReminderItem({
                 setError(null);
               }}
               disabled={isDeleting}
-              className="h-7 rounded-md border border-border-default px-3 text-xs font-medium text-text-primary disabled:opacity-60"
+              className="relative h-7 rounded-md border border-border-default px-3 text-xs font-medium text-text-primary before:absolute before:-inset-y-2 before:inset-x-0 disabled:opacity-60"
             >
               No
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-2">
             <Link
               href={editHref}
               aria-label="Editar recordatorio"

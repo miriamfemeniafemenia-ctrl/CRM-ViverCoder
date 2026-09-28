@@ -149,6 +149,9 @@ export const get = query({
 export const update = mutation({
   args: {
     id: v.id("reminders"),
+    // Fecha con la que el usuario abrió el formulario: permite avisar si otra
+    // sesión la cambió mientras tanto, en vez de un error de fecha confuso.
+    expectedDate: v.string(),
     date: v.string(),
     note: v.string(),
     assignedToId: v.id("users"),
@@ -165,6 +168,9 @@ export const update = mutation({
     }
     if (reminder.status !== "pendiente") {
       throw userError("El recordatorio ya está atendido");
+    }
+    if (reminder.date !== args.expectedDate) {
+      throw userError("El recordatorio ha cambiado en otra sesión; vuelve a abrirlo");
     }
     // Un recordatorio vencido se puede editar sin obligar a cambiar su fecha:
     // solo una fecha nueva tiene que ser de hoy en adelante.

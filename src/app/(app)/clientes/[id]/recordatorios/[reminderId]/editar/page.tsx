@@ -72,7 +72,13 @@ export default function Page({
           isEdit
           submitLabel="Guardar cambios"
           onSubmit={async ({ date, note, assignedToId }) => {
-            await updateReminder({ id: reminder._id, date, note, assignedToId });
+            await updateReminder({
+              id: reminder._id,
+              expectedDate: reminder.date,
+              date,
+              note,
+              assignedToId,
+            });
             router.push(backHref);
           }}
           onCancel={() => router.push(backHref)}
