@@ -151,7 +151,8 @@
   --shadow-xs: 0 1px 2px oklch(20% 0.01 255 / 0.05);
   --shadow-sm: 0 1px 2px oklch(20% 0.01 255 / 0.06), 0 1px 1px oklch(20% 0.01 255 / 0.04);
   --shadow-md: 0 2px 6px oklch(20% 0.01 255 / 0.08), 0 1px 2px oklch(20% 0.01 255 / 0.05);
-  --shadow-lg: 0 8px 20px oklch(20% 0.01 255 / 0.12), 0 2px 6px oklch(20% 0.01 255 / 0.06);
+  --shadow-lg:
+    0 8px 20px oklch(20% 0.01 255 / 0.12), 0 2px 6px oklch(20% 0.01 255 / 0.06);
   --shadow-nav: 0 1px 3px oklch(20% 0.01 255 / 0.08);
   --border-width: 1px;
   --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1);

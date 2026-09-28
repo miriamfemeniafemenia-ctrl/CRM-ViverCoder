@@ -37,17 +37,15 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 items-center justify-center bg-surface-app p-4">
-      <div className="w-full max-w-sm rounded-lg border border-border-default bg-surface-card p-8 shadow-md">
+    <div className="bg-surface-app flex min-h-full flex-1 items-center justify-center p-4">
+      <div className="border-border-default bg-surface-card w-full max-w-sm rounded-lg border p-8 shadow-md">
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary-500 text-lg font-bold text-on-brand">
+          <div className="bg-primary-500 text-on-brand flex h-11 w-11 items-center justify-center rounded-md text-lg font-bold">
             A
           </div>
           <div className="flex flex-col items-center gap-0.5 text-center">
-            <span className="text-lg font-bold text-text-primary">
-              Arco Seguros
-            </span>
-            <span className="text-sm text-text-tertiary">
+            <span className="text-text-primary text-lg font-bold">Arco Seguros</span>
+            <span className="text-text-tertiary text-sm">
               CRM · Inicia sesión para continuar
             </span>
           </div>
@@ -55,9 +53,7 @@ export default function Page() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-text-secondary">
-              Email
-            </span>
+            <span className="text-text-secondary text-sm font-medium">Email</span>
             <input
               type="email"
               value={email}
@@ -67,14 +63,12 @@ export default function Page() {
               }}
               placeholder="tu@arcoseguros.es"
               disabled={isLoading}
-              className="h-12 w-full rounded-md border border-border-default px-3 text-text-primary outline-none focus:border-primary-500 disabled:bg-neutral-100 disabled:text-text-tertiary"
+              className="border-border-default text-text-primary focus:border-primary-500 disabled:text-text-tertiary h-12 w-full rounded-md border px-3 outline-none disabled:bg-neutral-100"
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-text-secondary">
-              Contraseña
-            </span>
+            <span className="text-text-secondary text-sm font-medium">Contraseña</span>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -85,13 +79,13 @@ export default function Page() {
                 }}
                 placeholder="Tu contraseña"
                 disabled={isLoading}
-                className="h-12 w-full rounded-md border border-border-default px-3 pr-11 text-text-primary outline-none focus:border-primary-500 disabled:bg-neutral-100 disabled:text-text-tertiary"
+                className="border-border-default text-text-primary focus:border-primary-500 disabled:text-text-tertiary h-12 w-full rounded-md border px-3 pr-11 outline-none disabled:bg-neutral-100"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((value) => !value)}
                 aria-label="Mostrar u ocultar contraseña"
-                className="absolute top-0 right-0 flex h-12 w-11 items-center justify-center text-text-tertiary"
+                className="text-text-tertiary absolute top-0 right-0 flex h-12 w-11 items-center justify-center"
               >
                 {showPassword ? "🙈" : "👁"}
               </button>
@@ -99,9 +93,9 @@ export default function Page() {
           </label>
 
           {isError && (
-            <div className="flex items-start gap-2 rounded-md border border-warning-border bg-warning-bg px-4 py-3">
+            <div className="border-warning-border bg-warning-bg flex items-start gap-2 rounded-md border px-4 py-3">
               <span className="text-warning-fg">⚠</span>
-              <span className="text-sm text-warning-fg">
+              <span className="text-warning-fg text-sm">
                 Email o contraseña incorrectos. Inténtalo de nuevo.
               </span>
             </div>
@@ -110,7 +104,7 @@ export default function Page() {
           <button
             type="submit"
             disabled={isLoading || !email.trim() || !password}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-primary-500 font-medium text-on-brand disabled:opacity-60"
+            className="bg-primary-500 text-on-brand flex h-12 w-full items-center justify-center gap-2 rounded-md font-medium disabled:opacity-60"
           >
             {isLoading ? (
               <>
@@ -129,14 +123,14 @@ export default function Page() {
             <button
               type="button"
               onClick={() => setForgotOpen((value) => !value)}
-              className="text-sm text-text-link"
+              className="text-text-link text-sm"
             >
               ¿Olvidaste tu contraseña?
             </button>
             {forgotOpen && (
-              <p className="max-w-[280px] text-center text-xs text-text-tertiary">
-                Contacta con Miriam para restablecerla — no hay recuperación
-                automática con solo 3 cuentas.
+              <p className="text-text-tertiary max-w-[280px] text-center text-xs">
+                Contacta con Miriam para restablecerla — no hay recuperación automática
+                con solo 3 cuentas.
               </p>
             )}
           </div>
