@@ -16,10 +16,17 @@ import { mutation, query, QueryCtx } from "./_generated/server";
 //   las 3 cuentas: estar autenticado equivale a ser de la oficina. Si se abre
 //   el registro o se segmenta por cliente/equipo, la autorización tiene que
 //   pasar a `get`, `update` y `remove`.
-// - `update` es "última escritura gana": Convex serializa las mutations (no
-//   hay corrupción), pero una edición puede pisar otra hecha entre la carga
-//   y el guardado. Añadir control optimista (`updatedAt`/`revision`) exigiría
-//   cambiar el schema; se hará si el uso real muestra pisadas.
+// - `update` tiene control optimista sin tocar el schema: el cliente manda los
+//   valores con los que abrió el formulario (`expectedDate`, `expectedNote`,
+//   `expectedAssignedToId`) y el servidor rechaza el guardado si alguno ya no
+//   coincide (ARC-61 la fecha, ARC-71 nota y responsable). Convex serializa
+//   las mutations, así que comprobación y patch son atómicos. Es comparación
+//   por valor, no control de versión: un cambio A→B→A entre la carga y el
+//   guardado no se detecta (el resultado coincide con el original).
+//   `expectedNote` y `expectedAssignedToId` son opcionales solo por
+//   compatibilidad con pestañas abiertas antes de ARC-71; sin ellos, esos dos
+//   campos siguen siendo "última escritura gana". Hacerlos obligatorios cuando
+//   ya no queden pestañas antiguas.
 // - `remove` es idempotente: borrar algo que ya no existe es éxito.
 
 const NOTE_MAX_LENGTH = 500;
@@ -146,6 +153,9 @@ export const update = mutation({
     // Fecha con la que el usuario abrió el formulario: permite avisar si otra
     // sesión la cambió mientras tanto, en vez de un error de fecha confuso.
     expectedDate: v.string(),
+    // Igual para nota (tal como está guardada, ya recortada) y responsable.
+    expectedNote: v.optional(v.string()),
+    expectedAssignedToId: v.optional(v.id("users")),
     date: v.string(),
     note: v.string(),
     assignedToId: v.id("users"),
@@ -163,7 +173,12 @@ export const update = mutation({
     if (reminder.status !== "pendiente") {
       throw userError("El recordatorio ya está atendido");
     }
-    if (reminder.date !== args.expectedDate) {
+    if (
+      reminder.date !== args.expectedDate ||
+      (args.expectedNote !== undefined && reminder.note !== args.expectedNote) ||
+      (args.expectedAssignedToId !== undefined &&
+        reminder.assignedToId !== args.expectedAssignedToId)
+    ) {
       throw userError("El recordatorio ha cambiado en otra sesión; vuelve a abrirlo");
     }
     // Un recordatorio vencido se puede editar sin obligar a cambiar su fecha:
