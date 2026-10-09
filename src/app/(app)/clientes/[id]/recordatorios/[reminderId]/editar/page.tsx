@@ -72,15 +72,18 @@ export default function Page({
           initialDate={reminder.date}
           initialNote={reminder.note}
           initialAssignedToId={reminder.assignedToId}
-          // El formulario compara contra la fecha con la que se abrió. Si otra
-          // sesión la cambia con el formulario abierto, el servidor compara con
-          // la fecha actual y puede rechazar el guardado.
+          // Se envían fecha, nota y responsable con los que se abrió el
+          // formulario (ARC-71). `reminder` es la instantánea de apertura, no
+          // `liveReminder`: no derivar los valores esperados de datos reactivos,
+          // o el servidor nunca vería el conflicto.
           isEdit
           submitLabel="Guardar cambios"
           onSubmit={async ({ date, note, assignedToId }) => {
             await updateReminder({
               id: reminder._id,
               expectedDate: reminder.date,
+              expectedNote: reminder.note,
+              expectedAssignedToId: reminder.assignedToId,
               date,
               note,
               assignedToId,
