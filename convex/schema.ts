@@ -80,6 +80,12 @@ export default defineSchema({
       v.literal("web"),
     ),
     note: v.string(),
+    // Cuándo ocurrió la interacción (ISO, la elige quien la anota; cualquier
+    // fecha) — ARC-72. `createdAt` es cuándo se registró.
+    date: v.string(),
+    // Quién la realizó (seleccionable) frente a quién la registró (`createdById`,
+    // siempre la sesión activa).
+    performedById: v.id("users"),
     createdById: v.id("users"),
     createdAt: v.number(),
   }).index("by_client", ["clientId"]),

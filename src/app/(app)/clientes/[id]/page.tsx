@@ -112,6 +112,15 @@ export default function Page({
         </dl>
       </div>
 
+      <div className="mt-4 flex max-w-lg justify-end">
+        <Link
+          href={`/interacciones/nueva?clientId=${clientId}&from=${clientId}`}
+          className="border-border-default text-text-primary flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium"
+        >
+          Anotar interacción
+        </Link>
+      </div>
+
       <div className="border-border-default bg-surface-card mt-4 max-w-lg rounded-lg border p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-4">
           <h2 className="text-text-primary text-lg font-semibold">
