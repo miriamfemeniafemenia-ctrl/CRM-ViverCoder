@@ -23,10 +23,6 @@ import { mutation, query, QueryCtx } from "./_generated/server";
 //   las mutations, así que comprobación y patch son atómicos. Es comparación
 //   por valor, no control de versión: un cambio A→B→A entre la carga y el
 //   guardado no se detecta (el resultado coincide con el original).
-//   `expectedNote` y `expectedAssignedToId` son opcionales solo por
-//   compatibilidad con pestañas abiertas antes de ARC-71; sin ellos, esos dos
-//   campos siguen siendo "última escritura gana". Hacerlos obligatorios cuando
-//   ya no queden pestañas antiguas.
 // - `remove` es idempotente: borrar algo que ya no existe es éxito.
 
 const NOTE_MAX_LENGTH = 500;
@@ -154,8 +150,8 @@ export const update = mutation({
     // sesión la cambió mientras tanto, en vez de un error de fecha confuso.
     expectedDate: v.string(),
     // Igual para nota (tal como está guardada, ya recortada) y responsable.
-    expectedNote: v.optional(v.string()),
-    expectedAssignedToId: v.optional(v.id("users")),
+    expectedNote: v.string(),
+    expectedAssignedToId: v.id("users"),
     date: v.string(),
     note: v.string(),
     assignedToId: v.id("users"),
@@ -175,9 +171,8 @@ export const update = mutation({
     }
     if (
       reminder.date !== args.expectedDate ||
-      (args.expectedNote !== undefined && reminder.note !== args.expectedNote) ||
-      (args.expectedAssignedToId !== undefined &&
-        reminder.assignedToId !== args.expectedAssignedToId)
+      reminder.note !== args.expectedNote ||
+      reminder.assignedToId !== args.expectedAssignedToId
     ) {
       throw userError("El recordatorio ha cambiado en otra sesión; vuelve a abrirlo");
     }
