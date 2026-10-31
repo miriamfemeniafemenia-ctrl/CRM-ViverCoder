@@ -46,6 +46,25 @@ export function splitRemindersByToday<T extends { date: string }>(items: readonl
   return { dueOrToday, upcoming };
 }
 
+// Recordatorios vencidos o de hoy: lo que muestra la pestaña «Hoy» sin filtros
+// y lo que cuenta la insignia (ARC-65). Misma definición (`date <= today`) que
+// `countDueByAssignee` en convex/reminders.ts: si se toca una, tocar la otra.
+export function countDueOrToday(items: readonly { date: string }[], today: string) {
+  return splitRemindersByToday(items, today).dueOrToday.length;
+}
+
+// Texto de una insignia de cuenta: «9+» desde 10 (regla del diseño); `null` si
+// no hay nada que mostrar (cargando, 0 o un valor no válido).
+export function formatBadgeCount(count: number | undefined) {
+  if (count === undefined || !Number.isFinite(count) || count <= 0) return null;
+  return count > 9 ? "9+" : String(count);
+}
+
+// Para lectores de pantalla, con el número real (no «9+»).
+export function pendingTasksLabel(count: number) {
+  return count === 1 ? "1 tarea pendiente" : `${count} tareas pendientes`;
+}
+
 export type DueFilter = "todas" | "vencidas" | "hoy";
 
 // Filtro de vencimiento de la pestaña «Hoy» (ARC-63). Solo se aplica a la
