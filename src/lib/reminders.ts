@@ -46,6 +46,57 @@ export function splitRemindersByToday<T extends { date: string }>(items: readonl
   return { dueOrToday, upcoming };
 }
 
+export type DueFilter = "todas" | "vencidas" | "hoy";
+
+// Filtro de vencimiento de la pestaña «Hoy» (ARC-63). Solo se aplica a la
+// lista ya separada por `splitRemindersByToday`, nunca a «Próximas». Fechas ISO:
+// la comparación de cadenas es la de fechas. No ordena ni muta.
+export function filterByDue<T extends { date: string }>(items: readonly T[], filter: DueFilter, today: string) {
+  if (filter === "vencidas") return items.filter((item) => item.date < today);
+  if (filter === "hoy") return items.filter((item) => item.date === today);
+  return [...items];
+}
+
+// `null` = todos los clientes. No ordena ni muta.
+export function filterByClient<T extends { clientId: string }>(items: readonly T[], clientId: string | null) {
+  return clientId === null ? [...items] : items.filter((item) => item.clientId === clientId);
+}
+
+const UNAVAILABLE_CLIENT_LABEL = "Cliente no disponible";
+
+// Opciones del filtro de cliente a partir de los recordatorios: una por
+// `clientId`, ordenadas por nombre (es) y luego por id, así que no dependen del
+// orden de entrada. Los clientes con el mismo nombre —los borrados
+// (`clientName === null`) cuentan como uno— se numeran « (1)», « (2)»… por orden
+// de id; no se usa ningún dato personal para distinguirlos.
+export function clientFilterOptions(items: readonly { clientId: string; clientName: string | null }[]) {
+  const nameById = new Map<string, string>();
+  for (const { clientId, clientName } of items) {
+    nameById.set(clientId, clientName ?? UNAVAILABLE_CLIENT_LABEL);
+  }
+  const byName = new Map<string, string[]>();
+  for (const [id, name] of nameById) {
+    const ids = byName.get(name);
+    if (ids) ids.push(id);
+    else byName.set(name, [id]);
+  }
+  const options: { id: string; label: string }[] = [];
+  for (const [name, ids] of byName) {
+    ids.sort();
+    ids.forEach((id, index) => {
+      options.push({ id, label: ids.length > 1 ? `${name} (${index + 1})` : name });
+    });
+  }
+  return options.sort(
+    (a, b) => a.label.localeCompare(b.label, "es") || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+}
+
+// El cliente elegido si sigue entre las opciones; si no, `null` (todos).
+export function resolveClientFilter(selected: string | null, options: readonly { id: string }[]) {
+  return selected !== null && options.some((option) => option.id === selected) ? selected : null;
+}
+
 // Agrupa por fecha, con las fechas en orden ascendente (no depende del orden de
 // entrada) y, dentro de cada fecha, en el orden de entrada. No muta la entrada.
 export function groupByDate<T extends { date: string }>(items: readonly T[]) {
