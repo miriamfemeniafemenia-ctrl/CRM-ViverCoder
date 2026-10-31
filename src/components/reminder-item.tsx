@@ -25,6 +25,7 @@ const iconButtonClass =
 // con confirmación en la propia fila). "Marcar como hecho" es ARC-62.
 export function ReminderItem({
   clientName,
+  clientHref,
   date,
   note,
   assignedTo,
@@ -35,6 +36,9 @@ export function ReminderItem({
   // `null` = cliente borrado ("Cliente no disponible"); string = nombre. Solo
   // lo pasa P1, donde cada fila puede ser de un cliente distinto.
   clientName?: string | null;
+  // Solo P1 (ARC-64): convierte el nombre en un enlace a la ficha. Sin enlace si
+  // no se pasa o si el cliente ya no existe (`clientName === null`).
+  clientHref?: string;
   date: string;
   note: string;
   assignedTo: string;
@@ -70,11 +74,19 @@ export function ReminderItem({
     <li className="border-border-default flex flex-col gap-1 rounded-md border px-4 py-3">
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {clientName !== undefined && (
-            <span className="text-text-primary truncate text-sm font-semibold">
-              {clientName ?? "Cliente no disponible"}
-            </span>
-          )}
+          {clientName !== undefined &&
+            (clientHref && clientName !== null ? (
+              <Link
+                href={clientHref}
+                className="text-text-primary truncate text-sm font-semibold hover:underline"
+              >
+                {clientName}
+              </Link>
+            ) : (
+              <span className="text-text-primary truncate text-sm font-semibold">
+                {clientName ?? "Cliente no disponible"}
+              </span>
+            ))}
           <div className="flex items-center justify-between gap-4">
             <span className="text-text-primary font-medium">
               {new Date(`${date}T00:00:00`).toLocaleDateString("es-ES")}

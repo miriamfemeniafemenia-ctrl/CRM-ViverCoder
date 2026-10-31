@@ -13,6 +13,7 @@ import {
   resolveClientFilter,
   splitRemindersByToday,
 } from "@/lib/reminders";
+import { clientPageHref } from "@/lib/client-nav";
 import { useTodayMadrid } from "@/lib/use-today-madrid";
 import { api } from "../../../convex/_generated/api";
 
@@ -38,8 +39,9 @@ const selectClass =
 // «Próximas» (futuros agrupados por fecha). Filtros (ARC-63): «Cliente» en las
 // dos pestañas y «Fecha de vencimiento» solo en «Hoy». La pestaña y los
 // filtros viven solo en memoria, al volver de editar se abre «Hoy» sin filtros.
-// El resto de P1 (insignias, layout desde el filtro de cliente...) sigue
-// pendiente: ARC-17, ARC-35, ARC-58, ARC-64, ARC-65.
+// El nombre del cliente enlaza a su ficha (ARC-64); con un cliente elegido en
+// el filtro, la ficha se abre con Recordatorios arriba. El resto de P1
+// (insignias...) sigue pendiente: ARC-17, ARC-35, ARC-58, ARC-65.
 export default function Page() {
   const reminders = useQuery(api.reminders.listPendingByAssignee);
   const currentUser = useQuery(api.users.current);
@@ -67,6 +69,7 @@ export default function Page() {
       <ReminderItem
         key={reminder._id}
         clientName={reminder.clientName}
+        clientHref={clientPageHref(reminder.clientId, { filtered: resolvedClient !== null })}
         date={reminder.date}
         note={reminder.note}
         assignedTo={currentUser?.name ?? "—"}
