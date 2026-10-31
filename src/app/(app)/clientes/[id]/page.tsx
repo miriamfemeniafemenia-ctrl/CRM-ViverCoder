@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { use } from "react";
 import { ReminderItem } from "@/components/reminder-item";
+import { clientPageContext } from "@/lib/client-nav";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 
@@ -22,15 +23,6 @@ const CHANNEL_LABEL: Record<string, string> = {
   presencial: "Presencial",
 };
 
-// Origen desde el que se abrió P3 (regla de navegación ARC-8: "volver" debe
-// llevar al origen correcto). Solo P2 enlaza aquí hoy; P1 y P6 siguen siendo
-// placeholders y añadirán su propio ?from= cuando se construyan de verdad.
-const BACK_DESTINATION_BY_ORIGIN: Record<string, string> = {
-  p2: "/clientes",
-};
-const DEFAULT_BACK_DESTINATION = "/clientes";
-const DEFAULT_BACK_LABEL = "← Clientes";
-
 // /clientes/[id] — P3, ficha de cliente. Muestra por ahora los datos básicos
 // del alta (ARC-10/ARC-9) y una lista mínima de recordatorios pendientes
 // (ARC-60, alta con asignación; ARC-61, editar y eliminar). La sección
@@ -38,16 +30,21 @@ const DEFAULT_BACK_LABEL = "← Clientes";
 // de funciones de la ficha (F3, F4, F7, F8, F10 — historial, siniestros,
 // pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-18, ARC-19, ARC-21,
 // ARC-33, ARC-50, ARC-52, ARC-56.
+//
+// `?from=` dice desde dónde se abrió (regla de navegación ARC-8: «volver» lleva
+// al origen) y, desde P1 con un cliente elegido en el filtro, `?vista=recordatorios`
+// pone Recordatorios arriba y los datos del cliente debajo (ARC-64). Ver
+// `clientPageContext`.
 export default function Page({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string | string[]; vista?: string | string[] }>;
 }) {
   const { id } = use(params);
-  const { from } = use(searchParams);
-  const backHref = (from && BACK_DESTINATION_BY_ORIGIN[from]) || DEFAULT_BACK_DESTINATION;
+  const { from, vista } = use(searchParams);
+  const { backHref, backLabel, focusReminders } = clientPageContext(from, vista);
   const clientId = id as Id<"clients">;
   const client = useQuery(api.clients.get, { id: clientId });
   const pendingReminders = useQuery(api.reminders.listPendingByClient, {
@@ -76,85 +73,108 @@ export default function Page({
     );
   }
 
-  return (
-    <div className="flex min-h-full flex-1 flex-col p-6">
-      <Link href={backHref} className="text-text-link mb-4 text-sm">
-        {DEFAULT_BACK_LABEL}
-      </Link>
-
-      <div className="border-border-default bg-surface-card max-w-lg rounded-lg border p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h1 className="text-text-primary text-2xl font-semibold">{client.name}</h1>
-          <span className="rounded-pill bg-sale-interesado-bg text-sale-interesado-fg px-3 py-1 text-xs font-medium">
-            {SALE_STATUS_LABEL[client.saleStatus]}
-          </span>
-        </div>
-
-        <dl className="flex flex-col gap-3 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-text-tertiary">Teléfono</dt>
-            <dd className="text-text-primary">{client.phone || "—"}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-text-tertiary">Correo electrónico</dt>
-            <dd className="text-text-primary">{client.email || "—"}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-text-tertiary">Canal de entrada</dt>
-            <dd className="text-text-primary">{CHANNEL_LABEL[client.channel]}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-text-tertiary">Fecha de alta</dt>
-            <dd className="text-text-primary">
-              {new Date(client.createdAt).toLocaleString("es-ES")}
-            </dd>
-          </div>
-        </dl>
+  const clientCard = (
+    <div className="border-border-default bg-surface-card max-w-lg rounded-lg border p-6 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h1 className="text-text-primary text-2xl font-semibold">{client.name}</h1>
+        <span className="rounded-pill bg-sale-interesado-bg text-sale-interesado-fg px-3 py-1 text-xs font-medium">
+          {SALE_STATUS_LABEL[client.saleStatus]}
+        </span>
       </div>
 
-      <div className="mt-4 flex max-w-lg justify-end">
+      <dl className="flex flex-col gap-3 text-sm">
+        <div className="flex justify-between gap-4">
+          <dt className="text-text-tertiary">Teléfono</dt>
+          <dd className="text-text-primary">{client.phone || "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-text-tertiary">Correo electrónico</dt>
+          <dd className="text-text-primary">{client.email || "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-text-tertiary">Canal de entrada</dt>
+          <dd className="text-text-primary">{CHANNEL_LABEL[client.channel]}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-text-tertiary">Fecha de alta</dt>
+          <dd className="text-text-primary">
+            {new Date(client.createdAt).toLocaleString("es-ES")}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+
+  const interactionButton = (
+    <div className="mt-4 flex max-w-lg justify-end">
+      <Link
+        href={`/interacciones/nueva?clientId=${clientId}&from=${clientId}`}
+        className="border-border-default text-text-primary flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium"
+      >
+        Anotar interacción
+      </Link>
+    </div>
+  );
+
+  const remindersCard = (
+    <div className="border-border-default bg-surface-card max-w-lg rounded-lg border p-6 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h2 className="text-text-primary text-lg font-semibold">
+          Recordatorios pendientes
+        </h2>
         <Link
-          href={`/interacciones/nueva?clientId=${clientId}&from=${clientId}`}
-          className="border-border-default text-text-primary flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium"
+          href={`/clientes/${clientId}/recordatorios/nuevo`}
+          className="bg-primary-500 text-on-brand flex h-10 items-center justify-center rounded-md px-4 text-sm font-medium"
         >
-          Anotar interacción
+          Nuevo recordatorio
         </Link>
       </div>
 
-      <div className="border-border-default bg-surface-card mt-4 max-w-lg rounded-lg border p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-text-primary text-lg font-semibold">
-            Recordatorios pendientes
-          </h2>
-          <Link
-            href={`/clientes/${clientId}/recordatorios/nuevo`}
-            className="bg-primary-500 text-on-brand flex h-10 items-center justify-center rounded-md px-4 text-sm font-medium"
-          >
-            Nuevo recordatorio
-          </Link>
-        </div>
+      {pendingReminders === undefined ? (
+        <p className="text-text-tertiary text-sm">Cargando…</p>
+      ) : pendingReminders.length === 0 ? (
+        <p className="text-text-secondary text-sm">
+          No hay recordatorios pendientes para este cliente.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3 text-sm">
+          {pendingReminders.map((reminder) => (
+            <ReminderItem
+              key={reminder._id}
+              date={reminder.date}
+              note={reminder.note}
+              assignedTo={userNameById.get(reminder.assignedToId) ?? "—"}
+              editHref={`/clientes/${clientId}/recordatorios/${reminder._id}/editar`}
+              onDelete={() => removeReminder({ id: reminder._id })}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 
-        {pendingReminders === undefined ? (
-          <p className="text-text-tertiary text-sm">Cargando…</p>
-        ) : pendingReminders.length === 0 ? (
-          <p className="text-text-secondary text-sm">
-            No hay recordatorios pendientes para este cliente.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-3 text-sm">
-            {pendingReminders.map((reminder) => (
-              <ReminderItem
-                key={reminder._id}
-                date={reminder.date}
-                note={reminder.note}
-                assignedTo={userNameById.get(reminder.assignedToId) ?? "—"}
-                editHref={`/clientes/${clientId}/recordatorios/${reminder._id}/editar`}
-                onDelete={() => removeReminder({ id: reminder._id })}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
+  return (
+    <div className="flex min-h-full flex-1 flex-col p-6">
+      <Link href={backHref} className="text-text-link mb-4 text-sm">
+        {backLabel}
+      </Link>
+
+      {focusReminders ? (
+        <>
+          {/* Con los recordatorios arriba, el nombre del cliente (que vive en la
+              tarjeta de datos) se repite encima para saber de quién son. */}
+          <p className="text-text-secondary mb-2 max-w-lg text-sm">{client.name}</p>
+          {remindersCard}
+          <div className="mt-4">{clientCard}</div>
+          {interactionButton}
+        </>
+      ) : (
+        <>
+          {clientCard}
+          {interactionButton}
+          <div className="mt-4">{remindersCard}</div>
+        </>
+      )}
     </div>
   );
 }
