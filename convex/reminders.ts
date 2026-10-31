@@ -7,7 +7,8 @@ import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 // D3 — Recordatorio. Alta desde la sub-pantalla "Nuevo recordatorio" (ARC-15)
 // con asignación a un usuario del equipo (ARC-60), y edición/borrado desde P3
 // (ARC-61) y P1 (ARC-70). El resto de F5 (marcar como hecho, filtros, pestaña
-// "Próximas"...) queda fuera de este alcance — ver ARC-62, ARC-63, ARC-65.
+// "Próximas"...) queda fuera de este alcance — ver ARC-62, ARC-63, ARC-65 (el contador
+// del menú: `countDueByAssignee`).
 //
 // Reglas de negocio:
 // - Visibilidad total entre los 3 miembros de la oficina: ni `clients.get` ni
@@ -221,6 +222,40 @@ export const listPendingByAssignee = query({
     return reminders
       .map((r) => ({ ...r, clientName: clientNameById.get(r.clientId) ?? null }))
       .sort((a, b) => a.date.localeCompare(b.date) || a._id.localeCompare(b._id));
+  },
+});
+
+// Insignia de «Tareas de hoy» del menú (ARC-65): cuántos recordatorios
+// pendientes del usuario conectado vencen hoy o están vencidos. Devuelve solo un
+// número: el menú está en toda la app y no debe llevar al navegador clientes ni
+// notas solo para contar.
+//
+// `today` lo manda el cliente (Europe/Madrid, `useTodayMadrid`): una query de
+// Convex es reactiva y cacheada, no debe depender del reloj del servidor. Solo
+// acota los recordatorios del propio usuario, no abre acceso a nada. «Hoy o
+// vencido» es `date <= today`, la misma definición que `splitRemindersByToday`
+// en src/lib/reminders.ts (si se toca una, tocar la otra).
+//
+// Límite operativo: el índice no incluye `date`, así que cada llamada recorre
+// todos los pendientes de ese usuario (hoy, decenas). Aceptable con 3 usuarios;
+// si el volumen crece, vigilar lecturas/latencia en el panel de Convex y pasar a
+// un índice ["assignedToId", "status", "date"] con `lte("date", today)` (cambio
+// de schema aparte).
+export const countDueByAssignee = query({
+  args: { today: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    // Sin sesión se devuelve antes de tocar la base de datos.
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return 0;
+    if (!isValidISODate(args.today)) throw userError("La fecha no es válida");
+    const pending = await ctx.db
+      .query("reminders")
+      .withIndex("by_assignedTo_status", (q) =>
+        q.eq("assignedToId", userId).eq("status", "pendiente"),
+      )
+      .collect();
+    return pending.filter((r) => r.date <= args.today).length;
   },
 });
 

@@ -4,6 +4,8 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { formatBadgeCount, pendingTasksLabel } from "@/lib/reminders";
+import { useDueCount } from "@/lib/use-due-count";
 import { api } from "../../convex/_generated/api";
 
 // Shell de navegación principal (ARC-8). Iconos y estructura portados 1:1
@@ -66,6 +68,21 @@ function NavIcon({ name, active }: { name: IconName; active: boolean }) {
   );
 }
 
+// Insignia de cuenta (ARC-65), portada de `CountBadge` del design system:
+// círculo arriba a la derecha del icono, «9+» desde 10. Decorativa
+// (`aria-hidden`): el enlace lleva su propio texto para lectores de pantalla.
+function CountBadge({ text }: { text: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="bg-primary-500 text-on-brand rounded-pill absolute -top-0.5 -right-2 flex h-4 min-w-4 items-center justify-center px-[3px]"
+      style={{ font: "var(--text-micro)", fontWeight: 700, lineHeight: 1 }}
+    >
+      {text}
+    </span>
+  );
+}
+
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -76,6 +93,11 @@ export function MainNav() {
   const router = useRouter();
   const { signOut } = useAuthActions();
   const user = useQuery(api.users.current);
+  // Solo la entrada «Mis tareas de hoy» (href "/") lleva insignia: vencidos y de
+  // hoy del usuario conectado, recalculado al cambiar el día. Sin insignia visible
+  // (cargando o 0) tampoco se añade texto para lectores de pantalla.
+  const dueCount = useDueCount();
+  const dueBadge = formatBadgeCount(dueCount);
 
   async function handleSignOut() {
     await signOut();
@@ -112,6 +134,7 @@ export function MainNav() {
         <ul className="flex flex-1 items-stretch md:flex-col md:items-stretch md:gap-0.5 md:px-3">
           {NAV_ITEMS.map((item) => {
             const active = isActive(pathname, item.href);
+            const badge = item.href === "/" ? dueBadge : null;
             return (
               <li key={item.href} className="flex flex-1 md:flex-none">
                 <Link
@@ -123,10 +146,16 @@ export function MainNav() {
                       : "text-text-tertiary md:text-text-secondary font-medium"
                   }`}
                 >
-                  <NavIcon name={item.icon} active={active} />
+                  <span className="relative inline-flex">
+                    <NavIcon name={item.icon} active={active} />
+                    {badge !== null && <CountBadge text={badge} />}
+                  </span>
                   <span className="overflow-hidden text-ellipsis whitespace-nowrap">
                     {item.label}
                   </span>
+                  {badge !== null && dueCount !== undefined && (
+                    <span className="sr-only">{pendingTasksLabel(dueCount)}</span>
+                  )}
                 </Link>
               </li>
             );

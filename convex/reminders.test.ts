@@ -259,3 +259,103 @@ describe("reminders.update", () => {
     expect(await get(s)).toMatchObject({ note: "Editado por Antonio", assignedToId: s.monica });
   });
 });
+
+// `countDueByAssignee` (ARC-65): insignia de «Tareas de hoy». Fechas y «hoy»
+// fijos (se pasan como argumento): ninguna prueba depende del reloj.
+//
+// Los mismos casos límite están en src/lib/reminders.test.ts
+// (`countDueOrToday`): la query del servidor y el helper del cliente deben dar
+// el mismo resultado, y estas dos suites son lo que vigila que no se separen.
+describe("countDueByAssignee", () => {
+  const TODAY = "2026-11-02";
+
+  async function seed(
+    reminders: {
+      date: string;
+      assignedTo: "miriam" | "monica";
+      status?: "pendiente" | "atendido";
+    }[],
+  ) {
+    const s = await setup(); // trae un recordatorio base (FUTURE, Mónica, pendiente)
+    await s.t.run(async (ctx) => {
+      const clientId = (await ctx.db.query("clients").first())!._id;
+      for (const r of reminders) {
+        await ctx.db.insert("reminders", {
+          clientId,
+          date: r.date,
+          note: "Llamar",
+          status: r.status ?? "pendiente",
+          createdById: s.miriam,
+          assignedToId: r.assignedTo === "miriam" ? s.miriam : s.monica,
+        });
+      }
+    });
+    return s;
+  }
+
+  const count = (s: Ctx, who: Id<"users">, today = TODAY) =>
+    s.as(who).query(api.reminders.countDueByAssignee, { today });
+
+  test("cuenta vencidos y de hoy, no los de mañana (límites)", async () => {
+    const s = await seed([
+      { date: "2026-10-31", assignedTo: "miriam" },
+      { date: "2026-11-01", assignedTo: "miriam" }, // ayer
+      { date: TODAY, assignedTo: "miriam" }, // hoy
+      { date: "2026-11-03", assignedTo: "miriam" }, // mañana
+    ]);
+    expect(await count(s, s.miriam)).toBe(3);
+  });
+
+  test("límites de mes y de año", async () => {
+    const s = await seed([{ date: "2026-12-31", assignedTo: "miriam" }]);
+    expect(await count(s, s.miriam, "2027-01-01")).toBe(1);
+    expect(await count(s, s.miriam, "2026-12-31")).toBe(1);
+    expect(await count(s, s.miriam, "2026-12-30")).toBe(0);
+  });
+
+  test("solo cuenta los del usuario de la sesión", async () => {
+    const s = await seed([
+      { date: "2026-11-01", assignedTo: "miriam" },
+      { date: "2026-11-01", assignedTo: "monica" },
+      { date: "2026-10-30", assignedTo: "monica" },
+    ]);
+    expect(await count(s, s.miriam)).toBe(1);
+    expect(await count(s, s.monica)).toBe(2);
+    expect(await count(s, s.antonio)).toBe(0);
+  });
+
+  test("no cuenta los que no están pendientes", async () => {
+    const s = await seed([
+      { date: "2026-11-01", assignedTo: "miriam", status: "atendido" },
+      { date: "2026-11-01", assignedTo: "miriam" },
+    ]);
+    expect(await count(s, s.miriam)).toBe(1);
+  });
+
+  test("cambio de día: uno de «mañana» cuenta 0 hoy y 1 al día siguiente; uno de hoy sigue contando", async () => {
+    const s = await seed([
+      { date: "2026-11-03", assignedTo: "miriam" },
+      { date: TODAY, assignedTo: "miriam" },
+    ]);
+    expect(await count(s, s.miriam, TODAY)).toBe(1);
+    expect(await count(s, s.miriam, "2026-11-03")).toBe(2);
+  });
+
+  test("devuelve un número, sin documentos", async () => {
+    const s = await seed([{ date: "2026-11-01", assignedTo: "miriam" }]);
+    expect(typeof (await count(s, s.miriam))).toBe("number");
+  });
+
+  test("sin sesión devuelve 0", async () => {
+    const s = await seed([{ date: "2026-11-01", assignedTo: "miriam" }]);
+    expect(await s.t.query(api.reminders.countDueByAssignee, { today: TODAY })).toBe(0);
+  });
+
+  test.each(["2026-02-30", "2026-13-01", "2026-1-5", "", "hoy"])(
+    "rechaza un `today` inválido (%s) con sesión",
+    async (today) => {
+      const s = await seed([]);
+      expect(await userMessage(count(s, s.miriam, today))).toBe("La fecha no es válida");
+    },
+  );
+});

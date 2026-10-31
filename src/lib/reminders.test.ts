@@ -3,11 +3,14 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   clientFilterOptions,
+  countDueOrToday,
   filterByClient,
   filterByDue,
+  formatBadgeCount,
   formatLongDate,
   groupByDate,
   msUntilNextMadridMidnight,
+  pendingTasksLabel,
   resolveClientFilter,
   splitRemindersByToday,
   watchMadridDay,
@@ -238,6 +241,61 @@ describe("combinación cliente → separación Hoy/Próximas → vencimiento", (
     const { upcoming } = splitRemindersByToday(filterByClient(items, null), today);
     expect(upcoming.map((x) => x.id)).toEqual(["a3", "l3"]);
     expect(filterByClient(upcoming, "c2").map((x) => x.id)).toEqual(["l3"]);
+  });
+});
+
+// Los mismos casos que `countDueByAssignee` en convex/reminders.test.ts: el
+// cálculo del cliente (pestaña «Hoy») y el del servidor (insignia del menú)
+// deben coincidir, y estas dos suites son lo que vigila que no se separen.
+describe("countDueOrToday", () => {
+  const TODAY = "2026-11-02";
+
+  test("cuenta vencidos y de hoy, no los de mañana (límites)", () => {
+    const items = [r("2026-10-31"), r("2026-11-01"), r(TODAY), r("2026-11-03")];
+    expect(countDueOrToday(items, TODAY)).toBe(3);
+  });
+
+  test("límites de mes y de año", () => {
+    const items = [r("2026-12-31")];
+    expect(countDueOrToday(items, "2027-01-01")).toBe(1);
+    expect(countDueOrToday(items, "2026-12-31")).toBe(1);
+    expect(countDueOrToday(items, "2026-12-30")).toBe(0);
+  });
+
+  test("cambio de día: uno de «mañana» cuenta 0 hoy y 1 al día siguiente; uno de hoy sigue contando", () => {
+    const items = [r("2026-11-03"), r(TODAY)];
+    expect(countDueOrToday(items, TODAY)).toBe(1);
+    expect(countDueOrToday(items, "2026-11-03")).toBe(2);
+  });
+
+  test("lista vacía y sin mutar la entrada", () => {
+    expect(countDueOrToday([], TODAY)).toBe(0);
+    const frozen = Object.freeze([Object.freeze(r("2026-11-01")), Object.freeze(r("2026-11-09"))]);
+    expect(countDueOrToday(frozen, TODAY)).toBe(1);
+    expect(frozen).toHaveLength(2);
+  });
+});
+
+describe("formatBadgeCount", () => {
+  test.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])("sin insignia para %s", (count) => {
+    expect(formatBadgeCount(count)).toBeNull();
+  });
+
+  test.each([
+    [1, "1"],
+    [9, "9"],
+    [10, "9+"],
+    [150, "9+"],
+  ])("%d → %s", (count, expected) => {
+    expect(formatBadgeCount(count)).toBe(expected);
+  });
+});
+
+describe("pendingTasksLabel", () => {
+  test("singular y plural con el número real", () => {
+    expect(pendingTasksLabel(1)).toBe("1 tarea pendiente");
+    expect(pendingTasksLabel(2)).toBe("2 tareas pendientes");
+    expect(pendingTasksLabel(15)).toBe("15 tareas pendientes");
   });
 });
 

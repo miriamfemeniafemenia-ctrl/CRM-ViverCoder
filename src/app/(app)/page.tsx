@@ -6,6 +6,9 @@ import { ReminderItem } from "@/components/reminder-item";
 import {
   type DueFilter,
   clientFilterOptions,
+  countDueOrToday,
+  formatBadgeCount,
+  pendingTasksLabel,
   filterByClient,
   filterByDue,
   formatLongDate,
@@ -40,8 +43,9 @@ const selectClass =
 // dos pestañas y «Fecha de vencimiento» solo en «Hoy». La pestaña y los
 // filtros viven solo en memoria, al volver de editar se abre «Hoy» sin filtros.
 // El nombre del cliente enlaza a su ficha (ARC-64); con un cliente elegido en
-// el filtro, la ficha se abre con Recordatorios arriba. El resto de P1
-// (insignias...) sigue pendiente: ARC-17, ARC-35, ARC-58, ARC-65.
+// el filtro, la ficha se abre con Recordatorios arriba. La pestaña «Hoy» lleva
+// el contador de vencidos y de hoy (ARC-65), el mismo de la insignia del menú.
+// El resto de P1 sigue pendiente: ARC-17, ARC-35, ARC-58.
 export default function Page() {
   const reminders = useQuery(api.reminders.listPendingByAssignee);
   const currentUser = useQuery(api.users.current);
@@ -85,6 +89,11 @@ export default function Page() {
     today,
   );
   const todayVisible = filterByDue(dueOrToday, dueFilter, today);
+  // Contador de la pestaña «Hoy» (ARC-65): total real de vencidos y de hoy, sin
+  // filtros (el mismo valor que la insignia del menú). Se calcula con la lista
+  // que P1 ya tiene cargada, sin una segunda suscripción.
+  const dueTotal = reminders === undefined ? undefined : countDueOrToday(reminders, today);
+  const dueBadge = formatBadgeCount(dueTotal);
   const filtersActive =
     resolvedClient !== null || (tab === "hoy" && dueFilter !== "todas");
 
@@ -102,13 +111,29 @@ export default function Page() {
               type="button"
               aria-pressed={tab === id}
               onClick={() => setTab(id)}
-              className={`h-10 rounded-md px-4 text-sm font-medium ${
+              className={`flex h-10 items-center gap-2 rounded-md px-4 text-sm font-medium ${
                 tab === id
                   ? "bg-primary-500 text-on-brand"
                   : "border-border-default text-text-primary border"
               }`}
             >
               {label}
+              {id === "hoy" && dueBadge !== null && dueTotal !== undefined && (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className={`rounded-pill inline-flex h-[18px] min-w-[18px] items-center justify-center px-1 ${
+                      tab === id
+                        ? "bg-surface-card text-primary-600"
+                        : "text-text-secondary bg-neutral-200"
+                    }`}
+                    style={{ font: "var(--text-micro)", fontWeight: 700, lineHeight: 1 }}
+                  >
+                    {dueBadge}
+                  </span>
+                  <span className="sr-only">{pendingTasksLabel(dueTotal)}</span>
+                </>
+              )}
             </button>
           ))}
         </div>
