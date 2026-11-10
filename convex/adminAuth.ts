@@ -2,15 +2,27 @@ import { invalidateSessions, modifyAccountCredentials } from "@convex-dev/auth/s
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { normalizeEmail, runReset, type ResetResult } from "./lib/passwordReset";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  QueryCtx,
+} from "./_generated/server";
+import {
+  canTransition,
+  esPrevio,
+  normalizeEmail,
+  runReset,
+  UNRESOLVED_STATUSES,
+  type ResetResult,
+} from "./lib/passwordReset";
 
 // ARC-75 — Restablecer la contraseña de una de las 3 cuentas fijas. Todo es
 // `internal*`: no se puede llamar desde la app, solo con `npx convex run`
 // (acceso administrativo a Convex). Procedimiento seguro en el README
 // (sección Autenticación): la nueva contraseña va en la variable de entorno
 // RESET_PASSWORD, cargada sin escribirla en la línea de comandos, y se borra
-// al terminar. Nunca es un argumento.
+// al terminar (solo tras un resultado A). Nunca es un argumento.
 //
 // Qué garantiza y qué no: tras el reset, la contraseña antigua deja de valer y se
 // borran las sesiones y los refresh tokens de la cuenta, así que no se pueden
@@ -22,29 +34,50 @@ import { normalizeEmail, runReset, type ResetResult } from "./lib/passwordReset"
 
 const EXECUTOR = "acceso administrativo Convex (CLI)";
 
-// Cuentas permitidas: las 3 fijas (las mismas variables que usa seed.ts). Sin
-// emails en el código.
+// Las 3 cuentas permitidas, por el nombre de su variable (las mismas que usa
+// seed.ts). Sin emails en el código.
+const ACCOUNT_NAMES = ["MIRIAM", "MONICA", "ANTONIO"] as const;
+
 function allowedEmails() {
-  return [
-    process.env.SEED_MIRIAM_EMAIL,
-    process.env.SEED_MONICA_EMAIL,
-    process.env.SEED_ANTONIO_EMAIL,
-  ]
+  return ACCOUNT_NAMES.map((name) => process.env[`SEED_${name}_EMAIL`])
     .filter((email): email is string => Boolean(email))
     .map(normalizeEmail);
 }
 
-// Solo devuelve el id: nunca el documento (lleva el hash del secreto).
+// Búsqueda ÚNICA de la cuenta: provider "password" y providerAccountId igual al
+// email normalizado. La usan `findPasswordAccount` y `diagnosticoCuentas`, así que
+// una cuenta de otro provider con el mismo id no cuenta en ninguna. Devuelve solo
+// el id: nunca el documento (lleva el hash del secreto).
+async function buscarCuentaPassword(ctx: QueryCtx, email: string) {
+  const account = await ctx.db
+    .query("authAccounts")
+    .withIndex("providerAndAccountId", (q) =>
+      q.eq("provider", "password").eq("providerAccountId", email),
+    )
+    .unique();
+  return account?.userId ?? null;
+}
+
 export const findPasswordAccount = internalQuery({
   args: { email: v.string() },
-  handler: async (ctx, args) => {
-    const account = await ctx.db
-      .query("authAccounts")
-      .withIndex("providerAndAccountId", (q) =>
-        q.eq("provider", "password").eq("providerAccountId", args.email),
-      )
-      .unique();
-    return account?.userId ?? null;
+  handler: async (ctx, args) => buscarCuentaPassword(ctx, normalizeEmail(args.email)),
+});
+
+// Solo lectura. Antes de un reset, comprueba que las tres variables SEED_*_EMAIL
+// están alineadas con cuentas reales (si no, `resetPassword` falla cerrada). Solo
+// devuelve el nombre de cada variable y booleanos: nunca emails ni hashes.
+export const diagnosticoCuentas = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const cuentas = [];
+    for (const nombre of ACCOUNT_NAMES) {
+      const raw = process.env[`SEED_${nombre}_EMAIL`];
+      const variableConfigurada = Boolean(raw);
+      const cuentaEncontrada =
+        variableConfigurada && (await buscarCuentaPassword(ctx, normalizeEmail(raw!))) !== null;
+      cuentas.push({ nombre, variableConfigurada, cuentaEncontrada });
+    }
+    return { cuentas, todasAlineadas: cuentas.every((c) => c.cuentaEncontrada) };
   },
 });
 
@@ -73,8 +106,8 @@ export const sessionState = internalQuery({
   },
 });
 
-// Todos los campos obligatorios llevan valor inicial; el resto es opcional a
-// propósito y solo se rellena al cerrar.
+// Los obligatorios llevan valor al insertar; `sessionsAbsentAfterCheck` y el resto
+// de opcionales NO se inicializan: ausente = no se verificó.
 export const openAudit = internalMutation({
   args: { requestId: v.string(), userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -84,24 +117,26 @@ export const openAudit = internalMutation({
       startedAt: Date.now(),
       status: "iniciado",
       executor: EXECUTOR,
-      sessionsInvalidated: 0,
     });
   },
 });
 
-// El estado de destino no puede ser `inconcluso_supersedido` (solo lo escribe
-// `supersederPrevios`) ni ningún valor de «reparado»: no existe.
+// Tabla de transiciones aplicada aquí (el validador solo acota los destinos):
+// solo se modifica un registro en `iniciado` o `contrasena_cambiada`; los
+// terminales son inmutables. `inconcluso_supersedido` no es un destino válido (solo
+// lo escribe `supersederPrevios`) y no existe ningún estado de «reparado».
 export const updateAudit = internalMutation({
   args: {
     requestId: v.string(),
     status: v.union(
-      v.literal("fallo_cambio"),
+      v.literal("fallo_preparacion"),
+      v.literal("cambio_no_confirmado"),
       v.literal("contrasena_cambiada"),
       v.literal("completado"),
       v.literal("fallo_invalidacion"),
     ),
     finishedAt: v.optional(v.number()),
-    sessionsInvalidated: v.optional(v.number()),
+    sessionsAbsentAfterCheck: v.optional(v.number()),
     sessionsRemaining: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -111,17 +146,20 @@ export const updateAudit = internalMutation({
       .withIndex("by_requestId", (q) => q.eq("requestId", requestId))
       .unique();
     if (record === null) throw new Error("No existe ese registro de auditoría");
+    if (!canTransition(record.status, patch.status)) {
+      throw new Error(`Transición de auditoría no permitida: ${record.status} → ${patch.status}`);
+    }
     await ctx.db.patch(record._id, patch);
   },
 });
 
-const UNRESOLVED = ["iniciado", "fallo_cambio", "contrasena_cambiada", "fallo_invalidacion"];
-
 // Marca los registros previos sin resolver del MISMO usuario como inconclusos,
 // con referencia al reset completado que los sustituye. Solo con un `requestId`
-// en `completado`; excluye el propio registro y los posteriores a él; idempotente
-// (solo actúa sobre los que siguen sin resolver). No afirma que hubiera o no
-// cambio de contraseña en los previos.
+// en `completado`; excluye el propio registro y exige orden causal estricto
+// (`esPrevio`: creados ANTES); idempotente (solo actúa sobre los que siguen sin
+// resolver). Es el único camino que mueve registros terminales a
+// `inconcluso_supersedido`. No afirma que hubiera o no cambio de contraseña en los
+// previos.
 export const supersederPrevios = internalMutation({
   args: { requestId: v.string() },
   handler: async (ctx, args) => {
@@ -140,8 +178,8 @@ export const supersederPrevios = internalMutation({
     for (const previo of previos) {
       if (
         previo._id === record._id ||
-        previo._creationTime >= record._creationTime ||
-        !UNRESOLVED.includes(previo.status)
+        !esPrevio(previo, record) ||
+        !UNRESOLVED_STATUSES.includes(previo.status)
       ) {
         continue;
       }
@@ -152,6 +190,25 @@ export const supersederPrevios = internalMutation({
       superseded++;
     }
     return superseded;
+  },
+});
+
+// Registros sin resolver (y no supersedidos) de las cuentas permitidas. Consulta
+// el índice `by_userId` por usuario: no escanea la tabla completa.
+export const contarSinResolver = internalQuery({
+  args: { emails: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    let total = 0;
+    for (const email of new Set(args.emails.map(normalizeEmail))) {
+      const userId = await buscarCuentaPassword(ctx, email);
+      if (userId === null) continue;
+      const records = await ctx.db
+        .query("passwordResetAudit")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .collect();
+      total += records.filter((r) => UNRESOLVED_STATUSES.includes(r.status)).length;
+    }
+    return total;
   },
 });
 
@@ -192,9 +249,17 @@ export const resetPassword = internalAction({
     ),
 });
 
-// Permite comprobar que RESET_PASSWORD se borró sin enumerar variables ni leer
-// su valor: devuelve solo un booleano.
+// Permite comprobar que RESET_PASSWORD se borró sin enumerar variables ni leer su
+// valor, y cuántos registros siguen sin resolver. El incidente solo se da por
+// cerrado con resultado A y `registrosSinResolver` en 0.
 export const estadoRestablecimiento = internalAction({
   args: {},
-  handler: async () => ({ contrasenaConfigurada: Boolean(process.env.RESET_PASSWORD) }),
+  handler: async (
+    ctx,
+  ): Promise<{ contrasenaConfigurada: boolean; registrosSinResolver: number }> => ({
+    contrasenaConfigurada: Boolean(process.env.RESET_PASSWORD),
+    registrosSinResolver: await ctx.runQuery(internal.adminAuth.contarSinResolver, {
+      emails: allowedEmails(),
+    }),
+  }),
 });

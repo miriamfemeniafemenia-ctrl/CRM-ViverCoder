@@ -2,13 +2,21 @@
 // poder probar los fallos parciales con dependencias simuladas. La cablea
 // convex/adminAuth.ts.
 //
-// Orden y garantías (ver el plan de ARC-75):
-// - Antes de cambiar nada, cualquier fallo (cuenta no permitida, contraseña
-//   ausente, cuenta inexistente, no poder abrir la auditoría) aborta sin tocar datos.
-// - Tras cambiar la contraseña la invalidación de sesiones es obligatoria: un fallo
-//   de auditoría nunca la interrumpe (cada escritura va en su propio try/catch).
-// - Nunca se afirma lo que no se puede demostrar: solo `completado` dice que
-//   sesiones y refresh tokens quedaron a 0; nada «repara» registros ambiguos.
+// Orden y garantías (plan v5 de ARC-75):
+// - Antes de intentar cambiar nada, cualquier fallo aborta sin tocar datos.
+// - Desde que se invoca `modifyPassword`, la invalidación y la verificación de
+//   sesiones y refresh tokens son OBLIGATORIAS en cualquier desenlace, también si
+//   `modifyPassword` lanza: un error de transporte puede ocultar un commit efectivo
+//   y una sesión renovable no puede quedar viva. Un fallo de auditoría nunca la
+//   interrumpe (cada escritura va en su propio try/catch).
+// - Nunca se afirma lo que no se puede demostrar. Si `modifyPassword` lanza, no se
+//   sabe si el hash cambió: el resultado es D (`cambio_no_confirmado`), que NO es
+//   un estado seguro (la contraseña anterior puede seguir siendo válida y abrir
+//   sesiones nuevas) y exige reintentar hasta A. Una sesión posterior a la
+//   verificación solo es «legítima» en A/B/C, donde el cambio está confirmado.
+// - `sessionsAbsentAfterCheck` se escribe solo tras una verificación completa a 0
+//   y significa «sesiones observadas antes y que ya no existían al verificar»; no
+//   prueba que esta acción las invalidara.
 // - La contraseña nunca sale de aquí: ni en logs, ni en errores, ni en el resultado.
 // - No se revoca de forma inmediata una conexión ya autenticada: su JWT de acceso
 //   sigue valiendo hasta caducar (1 h por defecto en @convex-dev/auth).
@@ -16,8 +24,11 @@
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_INVALIDATION_ATTEMPTS = 3;
 
+// Destinos que puede escribir `updateAudit`. No incluye `iniciado` (lo escribe la
+// apertura) ni `inconcluso_supersedido` (solo `supersederPrevios`).
 export type AuditStatus =
-  | "fallo_cambio"
+  | "fallo_preparacion"
+  | "cambio_no_confirmado"
   | "contrasena_cambiada"
   | "completado"
   | "fallo_invalidacion";
@@ -25,9 +36,44 @@ export type AuditStatus =
 export type AuditPatch = {
   status: AuditStatus;
   finishedAt?: number;
-  sessionsInvalidated?: number;
+  sessionsAbsentAfterCheck?: number;
   sessionsRemaining?: number;
 };
+
+// Transiciones permitidas. Solo `iniciado` y `contrasena_cambiada` admiten
+// cambios; todo estado terminal (completado, fallo_preparacion,
+// cambio_no_confirmado, fallo_invalidacion, inconcluso_supersedido) es inmutable.
+// Los saltos desde `iniciado` son legítimos: las escrituras de auditoría son de
+// mejor esfuerzo y la de `contrasena_cambiada` puede fallar sin impedir el cierre.
+export const TRANSITIONS: Record<string, readonly AuditStatus[]> = {
+  iniciado: [
+    "fallo_preparacion",
+    "cambio_no_confirmado",
+    "contrasena_cambiada",
+    "completado",
+    "fallo_invalidacion",
+  ],
+  contrasena_cambiada: ["completado", "fallo_invalidacion"],
+};
+
+export function canTransition(from: string, to: string) {
+  return (TRANSITIONS[from] as readonly string[] | undefined)?.includes(to) ?? false;
+}
+
+// Registros que quedaron sin resolver: los resuelve un reset posterior en A
+// (`supersederPrevios`). `fallo_preparacion` no está: nada cambió con certeza.
+export const UNRESOLVED_STATUSES: readonly string[] = [
+  "iniciado",
+  "contrasena_cambiada",
+  "cambio_no_confirmado",
+  "fallo_invalidacion",
+];
+
+// Orden causal estricto: `previo` solo lo es si se creó ANTES (menor estricto).
+// Con la misma marca temporal el orden no está probado, así que no es previo.
+export function esPrevio(previo: { _creationTime: number }, record: { _creationTime: number }) {
+  return previo._creationTime < record._creationTime;
+}
 
 export type SessionState = {
   sessionIds: string[];
@@ -82,7 +128,7 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
 
   const requestId = deps.newRequestId();
   // Único punto en que un fallo de auditoría detiene la operación, y es antes de
-  // cambiar nada.
+  // intentar cambiar nada.
   await deps.openAudit(requestId, userId);
 
   // Mejor esfuerzo: un fallo aquí no puede impedir la invalidación.
@@ -94,21 +140,33 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
       return false;
     }
   };
+  const log = (resultado: string) =>
+    deps.log(`[resetPassword] requestId=${requestId} userId=${userId} resultado=${resultado}`);
 
+  // Preparación: aún no se ha intentado cambiar nada, así que aquí sí es seguro
+  // afirmar que la contraseña no se tocó.
   const seen = new Set<string>();
   try {
     const before = await deps.sessionState(userId, []);
     before.sessionIds.forEach((id) => seen.add(id));
-    await deps.modifyPassword(email, password);
   } catch {
-    await tryAudit({ status: "fallo_cambio", finishedAt: deps.now() });
-    deps.log(`[resetPassword] requestId=${requestId} userId=${userId} resultado=fallo_cambio`);
-    throw new Error(`No se ha cambiado la contraseña (requestId ${requestId})`);
+    await tryAudit({ status: "fallo_preparacion", finishedAt: deps.now() });
+    log("fallo_preparacion");
+    throw new Error(
+      `No se intentó cambiar la contraseña: falló la lectura previa de sesiones (requestId ${requestId})`,
+    );
   }
 
-  // Desde aquí la invalidación es obligatoria.
-  await tryAudit({ status: "contrasena_cambiada" });
+  // Desde aquí, un error de `modifyPassword` NO demuestra que el hash no cambiara.
+  let cambioNoConfirmado = false;
+  try {
+    await deps.modifyPassword(email, password);
+  } catch {
+    cambioNoConfirmado = true;
+  }
+  if (!cambioNoConfirmado) await tryAudit({ status: "contrasena_cambiada" });
 
+  // Invalidación y verificación: obligatorias en cualquier desenlace.
   let remaining: { sessions: number; refreshTokens: number } | null = null;
   for (let attempt = 1; attempt <= MAX_INVALIDATION_ATTEMPTS; attempt++) {
     try {
@@ -125,15 +183,48 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
     }
     if (remaining !== null && remaining.sessions === 0 && remaining.refreshTokens === 0) break;
   }
+  const verified =
+    remaining !== null && remaining.sessions === 0 && remaining.refreshTokens === 0;
+  const alive = remaining ? remaining.sessions + remaining.refreshTokens : undefined;
 
-  if (remaining === null || remaining.sessions !== 0 || remaining.refreshTokens !== 0) {
+  // D. Cambio NO confirmado: nunca éxito, y NO es un estado seguro.
+  if (cambioNoConfirmado) {
+    if (verified) {
+      await tryAudit({
+        status: "cambio_no_confirmado",
+        finishedAt: deps.now(),
+        sessionsAbsentAfterCheck: seen.size,
+        sessionsRemaining: 0,
+      });
+      log("D1");
+      throw new Error(
+        `CAMBIO DE CONTRASEÑA NO CONFIRMADO. La contraseña anterior puede seguir siendo válida y pueden ` +
+          `abrirse sesiones nuevas con ella; NO es un estado seguro. REINTENTA AHORA resetPassword, ` +
+          `inmediatamente y hasta obtener el resultado A (requestId ${requestId}). ` +
+          `NO retires RESET_PASSWORD ni cierres el incidente antes.`,
+      );
+    }
+    await tryAudit({
+      status: "cambio_no_confirmado",
+      finishedAt: deps.now(),
+      ...(alive !== undefined ? { sessionsRemaining: alive } : {}),
+    });
+    log("D2");
+    throw new Error(
+      `CRÍTICO: cambio de contraseña NO CONFIRMADO y sesiones/tokens NO invalidados; la contraseña ` +
+        `anterior puede seguir siendo válida. REINTENTA AHORA hasta obtener el resultado A ` +
+        `(requestId ${requestId}). NO retires RESET_PASSWORD.`,
+    );
+  }
+
+  // C. Cambio confirmado pero sesiones no invalidadas.
+  if (!verified) {
     await tryAudit({
       status: "fallo_invalidacion",
       finishedAt: deps.now(),
-      sessionsInvalidated: seen.size,
-      ...(remaining ? { sessionsRemaining: remaining.sessions + remaining.refreshTokens } : {}),
+      ...(alive !== undefined ? { sessionsRemaining: alive } : {}),
     });
-    deps.log(`[resetPassword] requestId=${requestId} userId=${userId} resultado=C`);
+    log("C");
     throw new Error(
       `CONTRASEÑA CAMBIADA pero las sesiones NO se han invalidado: vuelve a ejecutar (requestId ${requestId})`,
     );
@@ -142,11 +233,11 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
   const closed = await tryAudit({
     status: "completado",
     finishedAt: deps.now(),
-    sessionsInvalidated: seen.size,
+    sessionsAbsentAfterCheck: seen.size,
     sessionsRemaining: 0,
   });
   if (!closed) {
-    deps.log(`[resetPassword] requestId=${requestId} userId=${userId} resultado=B`);
+    log("B");
     return { ok: true, requestId, auditoriaPendiente: true };
   }
 
@@ -154,10 +245,10 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
   // y su fallo no degrada el reset.
   try {
     const registrosSupersedidos = await deps.superseder(requestId);
-    deps.log(`[resetPassword] requestId=${requestId} userId=${userId} resultado=A`);
+    log("A");
     return { ok: true, requestId, registrosSupersedidos };
   } catch {
-    deps.log(`[resetPassword] requestId=${requestId} userId=${userId} resultado=A historialPrevioPendiente`);
+    log("A historialPrevioPendiente");
     return { ok: true, requestId, historialPrevioPendiente: true };
   }
 }

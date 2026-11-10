@@ -30,22 +30,30 @@ export default defineSchema({
   // (convex/adminAuth.ts). Sin query/mutation pública: solo funciones internas
   // lo escriben. Nunca guarda contraseña, hash, token, valor de variable ni
   // email (el `userId` basta). `executor` no identifica a la persona: la CLI de
-  // Convex no lleva identidad. Los opcionales solo se rellenan al cerrar.
+  // Convex no lleva identidad. Los obligatorios llevan valor al insertar
+  // `iniciado`; los opcionales lo son a propósito y solo se rellenan al cerrar.
+  // `cambio_no_confirmado` es el estado ambiguo de un `modifyPassword` que lanzó:
+  // no afirma que la contraseña cambiara ni que no.
   passwordResetAudit: defineTable({
     requestId: v.string(),
     userId: v.id("users"),
     startedAt: v.number(),
     status: v.union(
       v.literal("iniciado"),
-      v.literal("fallo_cambio"),
+      v.literal("fallo_preparacion"),
       v.literal("contrasena_cambiada"),
+      v.literal("cambio_no_confirmado"),
       v.literal("completado"),
       v.literal("fallo_invalidacion"),
       v.literal("inconcluso_supersedido"),
     ),
     executor: v.string(),
-    sessionsInvalidated: v.number(),
     finishedAt: v.optional(v.number()),
+    // Sesiones observadas antes y que ya no existían al verificar; NO prueba que
+    // esta acción las invalidara. Solo se escribe tras una verificación completa a
+    // cero: ausente = no se verificó (sin valor por defecto 0).
+    sessionsAbsentAfterCheck: v.optional(v.number()),
+    // Sesiones + refresh tokens que seguían vivos (si se pudo contar).
     sessionsRemaining: v.optional(v.number()),
     supersededBy: v.optional(v.string()),
   })

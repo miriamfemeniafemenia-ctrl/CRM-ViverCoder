@@ -126,60 +126,104 @@ automática ni pantalla en la app. Existe una función interna permanente,
 acepta las 3 cuentas fijas (los emails de `SEED_MIRIAM_EMAIL`,
 `SEED_MONICA_EMAIL` y `SEED_ANTONIO_EMAIL`).
 
-**Qué garantiza y qué no.** Tras el reset, la contraseña antigua deja de valer y
-se borran las sesiones y los refresh tokens de la cuenta: no se pueden abrir ni
-renovar sesiones con la credencial anterior. Las sesiones invalidadas **no se
-cierran al instante**: una pestaña ya autenticada puede seguir funcionando
-hasta que caduque su token de acceso (1 hora por defecto en
-`@convex-dev/auth` 0.0.94). Es un riesgo aceptado para este ticket.
+**Qué garantiza y qué no.** Tras un reset completado (resultado A), la
+contraseña antigua deja de valer y se borran las sesiones y los refresh tokens
+de la cuenta: no se pueden abrir ni renovar sesiones con la credencial
+anterior. Las sesiones invalidadas **no se cierran al instante**: una pestaña ya
+autenticada puede seguir funcionando hasta que caduque su token de acceso
+(1 hora por defecto en `@convex-dev/auth` 0.0.94). Es un riesgo aceptado para
+este ticket.
 
 **La contraseña nueva jamás se copia en el chat, en argumentos de comandos, en
 el historial del terminal, en logs ni en capturas.** Va en la variable de
 entorno `RESET_PASSWORD` de Convex, cargada de forma interactiva, y se borra al
-terminar. Procedimiento (en el deployment que toque; añade `--prod` para
-producción):
+terminar (solo tras un resultado A).
+
+**Sintaxis de los comandos (importante en Windows).** Todos los comandos usan
+una única forma, con JSON5 y **sin comillas dobles dentro del JSON**, que está
+verificada en **Windows PowerShell 5.1** y en **Git Bash**:
+
+```
+npx convex run adminAuth:resetPassword "{email:'<correo de la cuenta>'}"
+```
+
+- **No uses comillas dobles dentro del JSON.** La forma `'{"email":"x"}'` falla
+  en PowerShell 5.1 (la CLI recibe `{email:x}` y responde `Failed to parse
+  arguments as JSON`), y `"{\"email\":\"x\"}"` falla con «too many arguments».
+  Si ves ese error, revisa las comillas.
+- `cmd.exe` **no está soportado ni verificado**: usa PowerShell o Git Bash.
+- Un correo inusual (por ejemplo con un apóstrofe) hace que el comando falle de
+  forma segura, sin ejecutarse. No escapes ni edites a mano ningún valor
+  sensible.
+- Añade `--prod` para producción.
+
+**Procedimiento:**
+0. **Diagnóstico previo (solo lectura):** `npx convex run adminAuth:diagnosticoCuentas`.
+   No continúes si `todasAlineadas` es `false`: significa que alguna variable
+   `SEED_*_EMAIL` no coincide con una cuenta real de tipo `password`, y
+   `resetPassword` fallaría cerrada. En **producción** esa alineación es una
+   precondición operativa crítica (comprobada al preparar ARC-75). En **dev** no
+   están alineadas (los `SEED_*` son valores de prueba), por eso las pruebas en
+   dev usan una cuenta de prueba.
 1. Carga la variable **sin escribir el valor en la línea de comandos**:
    `npx convex env set RESET_PASSWORD` (sin valor: la CLI lo pide de forma
    interactiva y no queda en el historial), o desde el panel web de Convex
    (Settings → Environment Variables). Mínimo 8 caracteres.
-2. Ejecuta (solo el email va en el comando):
-   `npx convex run adminAuth:resetPassword "{\"email\":\"<correo de la cuenta>\"}"`.
-   Guarda el `requestId` de la respuesta.
+2. Ejecuta `npx convex run adminAuth:resetPassword "{email:'<correo>'}"` y guarda el
+   `requestId` de la respuesta.
 3. **Anota en Linear, en el ARC-75, justo ahora** (no de memoria después): fecha,
-   hora, `requestId` y resultado (A, B o C, ver abajo). Sin correo, contraseña,
-   hash, token ni valores de entorno.
-4. Borra la variable: `npx convex env remove RESET_PASSWORD`, y comprueba que ya
-   no está sin enumerar valores (no uses `env list` ni `env get`):
-   `npx convex run adminAuth:estadoRestablecimiento` debe devolver
-   `contrasenaConfigurada: false`.
-5. Comunica la contraseña a la persona por un canal que no sea un chat o historial
-   persistente, y guárdala en un gestor de contraseñas.
+   hora, `requestId` y resultado (A, B, C, D1 o D2). Sin correo, contraseña, hash,
+   token ni valores de entorno.
+4. **Solo si el resultado fue A:** borra la variable con
+   `npx convex env remove RESET_PASSWORD` y comprueba, sin enumerar valores (no
+   uses `env list` ni `env get`): `npx convex run adminAuth:estadoRestablecimiento`
+   debe devolver `contrasenaConfigurada: false` y `registrosSinResolver: 0`. Solo
+   entonces se da el incidente por cerrado.
+5. Comunica la contraseña a la persona por un canal que no sea un chat o
+   historial persistente, y guárdala en un gestor de contraseñas.
 
-**Resultados.** La respuesta distingue siempre tres casos:
-- **A. Completado**: `{ ok: true, requestId }`. Contraseña cambiada, sesiones y
-  refresh tokens a 0, auditoría `completado`. Si la respuesta trae
-  `registrosSupersedidos`, se han marcado como inconclusos los registros previos
-  sin resolver.
-  - Si trae `historialPrevioPendiente: true` (el reset sí está completado, pero no
-    se pudo marcar el historial previo): ejecuta
-    `npx convex run adminAuth:supersederPrevios "{\"requestId\":\"<requestId>\"}"`
-    con **el `requestId` de la respuesta** (nunca de memoria) y repítelo con el
-    mismo `requestId` si falla; es idempotente.
+**Resultados.** La respuesta distingue siempre cinco casos:
+- **A. Completado**: `{ ok: true, requestId }`. Cambio confirmado, sesiones y
+  refresh tokens verificados a 0, auditoría `completado`. Si trae
+  `registrosSupersedidos`, se marcaron como inconclusos los registros previos sin
+  resolver. Si trae `historialPrevioPendiente: true` (el reset sí está completado,
+  pero no se pudo marcar el historial previo): ejecuta
+  `npx convex run adminAuth:supersederPrevios "{requestId:'<requestId>'}"` con **el
+  `requestId` de la respuesta** (nunca de memoria) y repítelo con el mismo
+  `requestId` si falla; es idempotente.
 - **B. Restablecimiento seguro completado, auditoría pendiente**:
-  `{ ok: true, auditoriaPendiente: true, requestId }`. La contraseña ya cambió y
-  las sesiones están a 0, pero el registro no pudo cerrarse. Anótalo en Linear
-  con su `requestId` y **repite el procedimiento completo** (pasos 1-4): el nuevo
-  reset deja el registro anterior como `inconcluso_supersedido`. No hay ningún
+  `{ ok: true, auditoriaPendiente: true, requestId }`. La contraseña ya cambió y las
+  sesiones están a 0, pero el registro no pudo cerrarse. Anótalo en Linear con su
+  `requestId` y **repite el procedimiento completo** (pasos 1-4): el nuevo reset
+  deja el registro anterior como `inconcluso_supersedido`. No hay ningún
   «reparar»: la auditoría no afirma lo que no puede demostrar.
 - **C. Sesiones NO invalidadas**: la función lanza «CONTRASEÑA CAMBIADA pero las
-  sesiones NO se han invalidado». Vuelve a ejecutar `resetPassword` (idempotente)
-  y comprueba que acaba en A. Hasta entonces, no declares la operación terminada.
+  sesiones NO se han invalidado». Vuelve a ejecutar `resetPassword` (idempotente) y
+  comprueba que acaba en A. Hasta entonces, no declares la operación terminada.
+- **D1. Cambio de contraseña NO confirmado** (la función lanza): la comunicación
+  con Convex falló y **no se sabe si el cambio se aplicó**. Las sesiones y los
+  refresh tokens sí se invalidaron y se verificaron, **pero D1 NO es un estado
+  seguro**: la contraseña anterior **puede seguir siendo válida** y pueden abrirse
+  sesiones nuevas con ella. **Reintenta ahora, de inmediato, hasta obtener A.**
+  **No retires `RESET_PASSWORD` ni cierres el incidente antes.** Ninguna sesión
+  abierta después se considera legítima.
+- **D2. Cambio NO confirmado y sesiones NO invalidadas** (error crítico): igual que
+  D1 pero además quedan sesiones o tokens vivos. Reintenta de inmediato hasta A y
+  no retires `RESET_PASSWORD`.
+- Si aparece «No se intentó cambiar la contraseña: falló la lectura previa de
+  sesiones» (`fallo_preparacion`): no se tocó nada; vuelve a ejecutarlo.
 
-**Auditoría.** Cada reset deja un registro en la tabla `passwordResetAudit`
-(sin contraseña, hash, token, valor de entorno ni email; solo `userId`,
-`requestId`, estado y recuentos). `npx convex run` no identifica a la persona
-que lo lanza, así que el campo `executor` es fijo: la atribución personal se
-cubre con la anotación en Linear del paso 3.
+**Auditoría.** Cada reset deja un registro en la tabla `passwordResetAudit` (sin
+contraseña, hash, token, valor de entorno ni email; solo `userId`, `requestId`,
+estado y recuentos). El campo `sessionsAbsentAfterCheck` significa «sesiones
+observadas antes y que ya no existían al verificar»: **no prueba que esta acción
+las invalidara**, y solo se escribe tras una verificación completa a cero (si no
+aparece, no se verificó). `sessionsRemaining` cuenta las sesiones y refresh
+tokens que seguían vivos. Los registros terminales no se pueden modificar; solo un
+reset posterior en A marca los previos sin resolver como `inconcluso_supersedido`.
+`npx convex run` no identifica a la persona que lo lanza, así que el campo
+`executor` es fijo: la atribución personal se cubre con la anotación en Linear
+del paso 3.
 
 **Copia de seguridad antes de tocar producción.** Antes del primer reset en
 producción, exporta los datos (`npx convex export --prod --path <ubicación>`) a
