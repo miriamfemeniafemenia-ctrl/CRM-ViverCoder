@@ -26,6 +26,32 @@ export default defineSchema({
     .index("email", ["email"])
     .index("phone", ["phone"]),
 
+  // ARC-75 — Registro de auditoría de restablecimientos de contraseña
+  // (convex/adminAuth.ts). Sin query/mutation pública: solo funciones internas
+  // lo escriben. Nunca guarda contraseña, hash, token, valor de variable ni
+  // email (el `userId` basta). `executor` no identifica a la persona: la CLI de
+  // Convex no lleva identidad. Los opcionales solo se rellenan al cerrar.
+  passwordResetAudit: defineTable({
+    requestId: v.string(),
+    userId: v.id("users"),
+    startedAt: v.number(),
+    status: v.union(
+      v.literal("iniciado"),
+      v.literal("fallo_cambio"),
+      v.literal("contrasena_cambiada"),
+      v.literal("completado"),
+      v.literal("fallo_invalidacion"),
+      v.literal("inconcluso_supersedido"),
+    ),
+    executor: v.string(),
+    sessionsInvalidated: v.number(),
+    finishedAt: v.optional(v.number()),
+    sessionsRemaining: v.optional(v.number()),
+    supersededBy: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_requestId", ["requestId"]),
+
   // D1 — Cliente: the central record everything else points to.
   clients: defineTable({
     name: v.string(),
