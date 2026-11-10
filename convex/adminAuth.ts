@@ -12,6 +12,7 @@ import {
   canTransition,
   esPrevio,
   normalizeEmail,
+  passwordProblem,
   runReset,
   UNRESOLVED_STATUSES,
   type ResetResult,
@@ -249,15 +250,22 @@ export const resetPassword = internalAction({
     ),
 });
 
-// Permite comprobar que RESET_PASSWORD se borró sin enumerar variables ni leer su
-// valor, y cuántos registros siguen sin resolver. El incidente solo se da por
+// Permite comprobar que RESET_PASSWORD está cargada y es válida, o que se borró,
+// sin enumerar variables ni leer su valor, y cuántos registros siguen sin resolver. El incidente solo se da por
 // cerrado con resultado A y `registrosSinResolver` en 0.
 export const estadoRestablecimiento = internalAction({
   args: {},
   handler: async (
     ctx,
-  ): Promise<{ contrasenaConfigurada: boolean; registrosSinResolver: number }> => ({
+  ): Promise<{
+    contrasenaConfigurada: boolean;
+    contrasenaValida: boolean;
+    registrosSinResolver: number;
+  }> => ({
     contrasenaConfigurada: Boolean(process.env.RESET_PASSWORD),
+    // true si pasa la misma validación que resetPassword (longitud, sin BOM ni
+    // saltos de línea). Comprobar antes de ejecutar el reset; no expone el valor.
+    contrasenaValida: passwordProblem(process.env.RESET_PASSWORD) === null,
     registrosSinResolver: await ctx.runQuery(internal.adminAuth.contarSinResolver, {
       emails: allowedEmails(),
     }),

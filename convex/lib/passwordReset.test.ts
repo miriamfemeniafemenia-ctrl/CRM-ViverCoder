@@ -8,6 +8,7 @@ import {
   MAX_INVALIDATION_ATTEMPTS,
   canTransition,
   esPrevio,
+  passwordProblem,
   runReset,
 } from "./passwordReset";
 
@@ -92,6 +93,32 @@ describe("runReset: validaciones previas (no tocan nada)", () => {
       expect(h.calls).toEqual([]);
       if (value) expect(message).not.toContain(value);
     }
+  });
+
+  test("contraseña con BOM, salto de línea o carácter de control (stdin de PowerShell 5.1) → rechaza sin tocar nada ni imprimirla", async () => {
+    const polluted = [
+      `﻿${PASSWORD}\r\n`, // lo que produce `valor | npx convex env set` en PowerShell 5.1
+      `${PASSWORD}\r\n`,
+      `${PASSWORD}\n`,
+      `﻿${PASSWORD}`,
+      `${PASSWORD}\t`,
+      `${PASSWORD}\u0000`,
+    ];
+    for (const value of polluted) {
+      const h = harness({ readPassword: () => value });
+      const message = await rejection(runReset(h.deps, EMAIL));
+      expect(h.calls).toEqual([]);
+      expect(message).toContain("BOM");
+      expect(message).not.toContain(PASSWORD);
+    }
+  });
+
+  test("passwordProblem: acepta contraseñas válidas (también con espacios y símbolos internos)", () => {
+    for (const ok of ["abcdefgh", "con espacios dentro 1", "ñandú-€-ÁÉ-123", PASSWORD]) {
+      expect(passwordProblem(ok)).toBeNull();
+    }
+    expect(passwordProblem(undefined)).not.toBeNull();
+    expect(passwordProblem("corta")).not.toBeNull();
   });
 
   test("cuenta inexistente → rechaza y no abre auditoría", async () => {

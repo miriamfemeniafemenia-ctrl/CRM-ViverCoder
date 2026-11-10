@@ -169,6 +169,13 @@ npx convex run adminAuth:resetPassword "{email:'<correo de la cuenta>'}"
    `npx convex env set RESET_PASSWORD` (sin valor: la CLI lo pide de forma
    interactiva y no queda en el historial), o desde el panel web de Convex
    (Settings → Environment Variables). Mínimo 8 caracteres.
+   **No la cargues enviándola por una tubería desde PowerShell 5.1**
+   (`"valor" | npx convex env set RESET_PASSWORD`): PowerShell le antepone un BOM
+   (U+FEFF) y le añade un salto de línea (CRLF), se guardaría una contraseña que
+   nadie escribió y la cuenta quedaría bloqueada (comprobado en dev). Si pasa,
+   `resetPassword` la rechaza sin tocar nada. **Antes de ejecutar el reset,
+   comprueba** `npx convex run adminAuth:estadoRestablecimiento`: debe decir
+   `contrasenaConfigurada: true` y `contrasenaValida: true` (no expone el valor).
 2. Ejecuta `npx convex run adminAuth:resetPassword "{email:'<correo>'}"` y guarda el
    `requestId` de la respuesta.
 3. **Anota en Linear, en el ARC-75, justo ahora** (no de memoria después): fecha,
@@ -177,7 +184,7 @@ npx convex run adminAuth:resetPassword "{email:'<correo de la cuenta>'}"
 4. **Solo si el resultado fue A:** borra la variable con
    `npx convex env remove RESET_PASSWORD` y comprueba, sin enumerar valores (no
    uses `env list` ni `env get`): `npx convex run adminAuth:estadoRestablecimiento`
-   debe devolver `contrasenaConfigurada: false` y `registrosSinResolver: 0`. Solo
+   debe devolver `contrasenaConfigurada: false` y `registrosSinResolver: 0` (y, por tanto, `contrasenaValida: false`). Solo
    entonces se da el incidente por cerrado.
 5. Comunica la contraseña a la persona por un canal que no sea un chat o
    historial persistente, y guárdala en un gestor de contraseñas.

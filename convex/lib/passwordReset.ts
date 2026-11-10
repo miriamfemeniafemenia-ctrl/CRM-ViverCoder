@@ -22,6 +22,28 @@
 //   sigue valiendo hasta caducar (1 h por defecto en @convex-dev/auth).
 
 export const MIN_PASSWORD_LENGTH = 8;
+
+// Una contraseña cargada por stdin desde Windows PowerShell 5.1 llega con un BOM
+// (U+FEFF) delante y un salto de línea (CRLF) detrás: se guardaría como un hash de
+// algo que nadie escribió y la cuenta quedaría bloqueada (verificado en dev). Se
+// rechaza ANTES de tocar nada. Devuelve el motivo (sin incluir el valor) o null.
+export function passwordProblem(password: string | undefined): string | null {
+  if (!password) return "RESET_PASSWORD no está configurada";
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `RESET_PASSWORD tiene menos de ${MIN_PASSWORD_LENGTH} caracteres`;
+  }
+  for (const ch of password) {
+    const code = ch.codePointAt(0)!;
+    if (code <= 0x1f || code === 0x7f || code === 0xfeff) {
+      return (
+        "RESET_PASSWORD contiene un salto de línea, un carácter de control o un BOM (típico de " +
+        "cargarla por stdin desde PowerShell 5.1). Cárgala con 'npx convex env set RESET_PASSWORD' " +
+        "sin valor (entrada interactiva) o desde el panel web de Convex"
+      );
+    }
+  }
+  return null;
+}
 export const MAX_INVALIDATION_ATTEMPTS = 3;
 
 // Destinos que puede escribir `updateAudit`. No incluye `iniciado` (lo escribe la
@@ -116,10 +138,9 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
     throw new Error("Esa cuenta no está permitida para restablecer la contraseña");
   }
   const password = deps.readPassword();
-  if (!password || password.length < MIN_PASSWORD_LENGTH) {
-    throw new Error(
-      `RESET_PASSWORD no está configurada o tiene menos de ${MIN_PASSWORD_LENGTH} caracteres`,
-    );
+  const problem = passwordProblem(password);
+  if (problem !== null || password === undefined) {
+    throw new Error(problem ?? "RESET_PASSWORD no está configurada");
   }
   const userId = await deps.findUserId(email);
   if (userId === null) {

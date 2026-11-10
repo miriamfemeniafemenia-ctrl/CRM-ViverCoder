@@ -536,17 +536,33 @@ describe("diagnosticoCuentas (solo lectura)", () => {
 });
 
 describe("estadoRestablecimiento", () => {
-  test("contrasenaConfigurada según la variable; sin registros → 0", async () => {
+  test("contrasenaConfigurada y contrasenaValida según la variable; sin registros → 0", async () => {
     const t = await setup();
     expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toEqual({
       contrasenaConfigurada: true,
+      contrasenaValida: true,
       registrosSinResolver: 0,
     });
     vi.stubEnv("RESET_PASSWORD", "");
     expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toEqual({
       contrasenaConfigurada: false,
+      contrasenaValida: false,
       registrosSinResolver: 0,
     });
+  });
+
+  test("una contraseña con BOM y CRLF (stdin de PowerShell 5.1) figura como configurada pero NO válida, y el reset la rechaza sin tocar nada", async () => {
+    const t = await setup();
+    vi.stubEnv("RESET_PASSWORD", `﻿${NEW_PASSWORD}
+`);
+    const status = await t.action(internal.adminAuth.estadoRestablecimiento, {});
+    expect(status).toMatchObject({ contrasenaConfigurada: true, contrasenaValida: false });
+    expect(JSON.stringify(status)).not.toContain(NEW_PASSWORD);
+    await expect(t.action(internal.adminAuth.resetPassword, { email: MIRIAM })).rejects.toThrow(
+      "BOM",
+    );
+    expect(await passwordWorks(t, MIRIAM, OLD_PASSWORD)).toBe(true);
+    expect(await allAudit(t)).toHaveLength(0);
   });
 
   test("registrosSinResolver cuenta solo los sin resolver de las cuentas permitidas", async () => {
