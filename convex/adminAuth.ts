@@ -13,6 +13,7 @@ import {
   clasificarResultado,
   type Ejecucion,
   esPrevio,
+  esperaMaxMs,
   mensajeEnCurso,
   normalizeEmail,
   passwordProblem,
@@ -54,10 +55,6 @@ const EXECUTOR = "acceso administrativo Convex (CLI)";
 // seed.ts). Sin emails en el código.
 const ACCOUNT_NAMES = ["MIRIAM", "MONICA", "ANTONIO"] as const;
 type AccountName = (typeof ACCOUNT_NAMES)[number];
-
-// Tiempo máximo que espera la envoltura al resultado (ms). Se puede acortar con la
-// variable RESET_ESPERA_MAX_MS (no sensible), pensada solo para pruebas.
-const ESPERA_MAX_MS_POR_DEFECTO = 120_000;
 
 // Búsqueda ÚNICA de la cuenta: provider "password" y providerAccountId igual al
 // email normalizado. Devuelve solo el id: nunca el documento (lleva el hash).
@@ -384,9 +381,8 @@ export const resetPassword = internalAction({
     const { requestId } = await ctx.runMutation(internal.adminAuth.solicitarReset, {
       email: args.email,
     });
-    const configurado = Number(process.env.RESET_ESPERA_MAX_MS);
-    const esperaMax = configurado > 0 ? configurado : ESPERA_MAX_MS_POR_DEFECTO;
-    const limite = Date.now() + esperaMax;
+    // Validada (finita, entre un mínimo y un máximo); solo para pruebas.
+    const limite = Date.now() + esperaMaxMs(process.env.RESET_ESPERA_MAX_MS);
     let pausa = 200;
     for (;;) {
       const vista = await ctx.runQuery(internal.adminAuth.resultadoReset, { requestId });
@@ -439,14 +435,15 @@ export const estadoCuentas = internalQuery({
 
 // Permite comprobar que RESET_PASSWORD está cargada y es válida, o que se borró,
 // sin enumerar variables ni leer su valor, y si el cierre del incidente es seguro.
-// `cierrePermitido` es el criterio único: configuración alineada, 0 registros sin
-// resolver y ningún reset vivo.
+// `cierrePermitido` es el criterio único: variable RESET_PASSWORD eliminada,
+// configuración alineada, 0 registros sin resolver y ningún reset vivo.
 export const estadoRestablecimiento = internalAction({
   args: {},
   handler: async (
     ctx,
   ): Promise<{
     contrasenaConfigurada: boolean;
+    contrasenaEliminada: boolean;
     contrasenaValida: boolean;
     configuracionAlineada: boolean;
     registrosSinResolver: number | null;
@@ -456,14 +453,22 @@ export const estadoRestablecimiento = internalAction({
     const cuentas = await ctx.runQuery(internal.adminAuth.estadoCuentas, {});
     return {
       contrasenaConfigurada: Boolean(process.env.RESET_PASSWORD),
+      // true solo si la variable NO existe: una cadena vacía sigue siendo una
+      // variable definida, no equivale a haberla eliminado.
+      contrasenaEliminada: process.env.RESET_PASSWORD === undefined,
       // true si pasa la misma validación que el reset (longitud, sin BOM ni
       // saltos de línea ni caracteres invisibles). No expone el valor.
       contrasenaValida: passwordProblem(process.env.RESET_PASSWORD) === null,
       configuracionAlineada: cuentas.alineada,
       registrosSinResolver: cuentas.registrosSinResolver,
       resetEnCurso: cuentas.resetEnCurso,
+      // El incidente solo se cierra con la variable ELIMINADA, además de la
+      // configuración alineada, 0 registros sin resolver y ningún reset vivo.
       cierrePermitido:
-        cuentas.alineada && cuentas.registrosSinResolver === 0 && cuentas.resetEnCurso === false,
+        process.env.RESET_PASSWORD === undefined &&
+        cuentas.alineada &&
+        cuentas.registrosSinResolver === 0 &&
+        cuentas.resetEnCurso === false,
     };
   },
 });

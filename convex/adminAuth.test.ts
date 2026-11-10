@@ -699,20 +699,53 @@ describe("fallos reales del trabajo programado (el operador recibe solo mensajes
 });
 
 describe("estadoRestablecimiento", () => {
-  test("todo alineado y sin registros → cierrePermitido true", async () => {
+  test("todo alineado y sin registros: con RESET_PASSWORD presente NO se puede cerrar; solo con la variable ELIMINADA", async () => {
     const t = await setup();
+    // Variable presente (cargada y válida): el incidente no puede darse por cerrado.
     expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toEqual({
       contrasenaConfigurada: true,
+      contrasenaEliminada: false,
       contrasenaValida: true,
+      configuracionAlineada: true,
+      registrosSinResolver: 0,
+      resetEnCurso: false,
+      cierrePermitido: false,
+    });
+    // Eliminada (no definida): ahora sí.
+    vi.stubEnv("RESET_PASSWORD", undefined);
+    expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toEqual({
+      contrasenaConfigurada: false,
+      contrasenaEliminada: true,
+      contrasenaValida: false,
       configuracionAlineada: true,
       registrosSinResolver: 0,
       resetEnCurso: false,
       cierrePermitido: true,
     });
+  });
+
+  test("una variable definida pero VACÍA no equivale a haberla eliminado: cierrePermitido sigue en false", async () => {
+    const t = await setup();
     vi.stubEnv("RESET_PASSWORD", "");
     expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toMatchObject({
-      contrasenaConfigurada: false,
-      contrasenaValida: false,
+      contrasenaConfigurada: false, // vacía: no hay contraseña utilizable…
+      contrasenaEliminada: false, // …pero la variable sigue definida
+      cierrePermitido: false,
+    });
+  });
+
+  test("tras un A con la variable todavía presente no se puede cerrar; al eliminarla, sí", async () => {
+    const t = await setup();
+    await reset(t, MIRIAM);
+    expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toMatchObject({
+      registrosSinResolver: 0,
+      resetEnCurso: false,
+      contrasenaEliminada: false,
+      cierrePermitido: false,
+    });
+    vi.stubEnv("RESET_PASSWORD", undefined);
+    expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toMatchObject({
+      contrasenaEliminada: true,
       cierrePermitido: true,
     });
   });
@@ -724,6 +757,7 @@ describe("estadoRestablecimiento", () => {
     vi.stubEnv("SEED_MONICA_EMAIL", ""); // se omite justo a la usuaria con el pendiente
     expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toEqual({
       contrasenaConfigurada: true,
+      contrasenaEliminada: false,
       contrasenaValida: true,
       configuracionAlineada: false,
       registrosSinResolver: null,
@@ -934,7 +968,8 @@ describe("supersederPrevios", () => {
       status: "inconcluso_supersedido",
       supersededBy: result.requestId,
     });
-    // No quedan registros sin resolver: se puede cerrar.
+    // No quedan registros sin resolver; con la variable eliminada se puede cerrar.
+    vi.stubEnv("RESET_PASSWORD", undefined);
     expect(await t.action(internal.adminAuth.estadoRestablecimiento, {})).toMatchObject({
       registrosSinResolver: 0,
       cierrePermitido: true,

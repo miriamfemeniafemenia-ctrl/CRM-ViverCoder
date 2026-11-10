@@ -36,6 +36,27 @@ export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_INVALIDATION_ATTEMPTS = 3;
 export const AUDIT_WRITE_ATTEMPTS = 3;
 
+// Espera máxima de la envoltura al resultado (ms). La variable RESET_ESPERA_MAX_MS
+// (no sensible) existe solo para pruebas y NO está documentada para producción: se
+// valida (finita, entre el mínimo y el máximo) y, si no cumple, rige el valor por
+// defecto. El máximo queda muy por debajo del límite de una action del runtime.
+export const ESPERA_MAX_MS_POR_DEFECTO = 120_000;
+export const ESPERA_MAX_MS_MINIMA = 100;
+export const ESPERA_MAX_MS_MAXIMA = 300_000;
+export function esperaMaxMs(raw: string | undefined): number {
+  const valor = Number(raw);
+  if (
+    raw === undefined ||
+    raw.trim() === "" ||
+    !Number.isFinite(valor) ||
+    valor < ESPERA_MAX_MS_MINIMA ||
+    valor > ESPERA_MAX_MS_MAXIMA
+  ) {
+    return ESPERA_MAX_MS_POR_DEFECTO;
+  }
+  return valor;
+}
+
 // Red de seguridad, NO el mecanismo normal de liberación: el límite de una action
 // del runtime Convex es de 30 min (10 en Node); se usa el más conservador + 5 min
 // de margen. Un registro no terminal más antiguo que esto no puede tener una

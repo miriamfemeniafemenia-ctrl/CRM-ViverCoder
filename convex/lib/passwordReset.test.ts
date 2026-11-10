@@ -7,12 +7,16 @@ import {
   type AuditPatch,
   type ResetDeps,
   AUDIT_WRITE_ATTEMPTS,
+  ESPERA_MAX_MS_MAXIMA,
+  ESPERA_MAX_MS_MINIMA,
+  ESPERA_MAX_MS_POR_DEFECTO,
   LEASE_MS,
   MAX_INVALIDATION_ATTEMPTS,
   canTransition,
   clasificarResultado,
   ejecucionViva,
   esPrevio,
+  esperaMaxMs,
   passwordProblem,
   registroBloquea,
   runReset,
@@ -507,5 +511,38 @@ describe("transiciones de auditoría y orden causal", () => {
     expect(esPrevio({ _creationTime: 1 }, { _creationTime: 2 })).toBe(true);
     expect(esPrevio({ _creationTime: 2 }, { _creationTime: 2 })).toBe(false);
     expect(esPrevio({ _creationTime: 3 }, { _creationTime: 2 })).toBe(false);
+  });
+});
+
+describe("esperaMaxMs (RESET_ESPERA_MAX_MS, solo para pruebas)", () => {
+  test("valores válidos dentro del rango se respetan", () => {
+    expect(esperaMaxMs("400")).toBe(400);
+    expect(esperaMaxMs(String(ESPERA_MAX_MS_MINIMA))).toBe(ESPERA_MAX_MS_MINIMA);
+    expect(esperaMaxMs(String(ESPERA_MAX_MS_MAXIMA))).toBe(ESPERA_MAX_MS_MAXIMA);
+  });
+
+  test("ausente, vacía, no finita, negativa, cero o fuera del rango → valor por defecto", () => {
+    for (const raw of [
+      undefined,
+      "",
+      "   ",
+      "abc",
+      "NaN",
+      "Infinity",
+      "-Infinity",
+      "-5",
+      "0",
+      String(ESPERA_MAX_MS_MINIMA - 1),
+      String(ESPERA_MAX_MS_MAXIMA + 1),
+      "999999999999",
+      "1e308",
+    ]) {
+      expect(esperaMaxMs(raw), String(raw)).toBe(ESPERA_MAX_MS_POR_DEFECTO);
+    }
+  });
+
+  test("el máximo queda muy por debajo del límite de una action del runtime (30 min)", () => {
+    expect(ESPERA_MAX_MS_MAXIMA).toBeLessThan(30 * 60 * 1000);
+    expect(ESPERA_MAX_MS_POR_DEFECTO).toBeLessThanOrEqual(ESPERA_MAX_MS_MAXIMA);
   });
 });

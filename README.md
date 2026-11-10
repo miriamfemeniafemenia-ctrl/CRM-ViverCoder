@@ -221,8 +221,11 @@ npx convex run adminAuth:supersederPrevios "{requestId:'<requestId>'}"
 4. **Solo si el resultado fue A:** borra la variable con
    `npx convex env remove RESET_PASSWORD` y comprueba, sin enumerar valores (no
    uses `env list` ni `env get`): `npx convex run adminAuth:estadoRestablecimiento`
-   debe devolver `contrasenaConfigurada: false` y **`cierrePermitido: true`**
-   (configuración alineada, 0 registros sin resolver y ningún reset vivo). Con la
+   debe devolver `contrasenaEliminada: true` (la variable ya **no existe**: una
+   variable definida pero vacía no cuenta como eliminada) y
+   **`cierrePermitido: true`** (que exige además configuración alineada, 0 registros
+   sin resolver y ningún reset vivo). **Con `RESET_PASSWORD` todavía presente,
+   `cierrePermitido` es siempre `false`.** Con la
    configuración sin alinear, `registrosSinResolver` y `resetEnCurso` salen como
    `null` (nunca 0) y `cierrePermitido` es `false`. Solo con `cierrePermitido: true`
    se da el incidente por cerrado.
