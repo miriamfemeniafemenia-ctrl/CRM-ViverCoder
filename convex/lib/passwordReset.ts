@@ -2,7 +2,17 @@
 // poder probar los fallos parciales con dependencias simuladas. La cablea
 // convex/adminAuth.ts.
 //
-// Orden y garantías (plan v5 de ARC-75):
+// Arquitectura (plan v7):
+// - `resetPassword` (la invoca el operador) solo SOLICITA el reset y espera: el
+//   trabajo de riesgo lo hace `ejecutarReset`, una action PROGRAMADA. El estado de
+//   una función programada lo escribe la plataforma (`_scheduled_functions`), así
+//   que "¿sigue viva la ejecución?" no depende de ninguna escritura de auditoría
+//   que pueda fallar. Solo hay un reset vivo en todo el sistema.
+// - A la acción programada solo se le pasan identificadores opacos
+//   ({ requestId, userId }): Convex conserva sus argumentos días en
+//   `_scheduled_functions`, y el email nunca debe quedar ahí.
+//
+// Garantías del trabajo (`runReset`):
 // - Antes de intentar cambiar nada, cualquier fallo aborta sin tocar datos.
 // - Desde que se invoca `modifyPassword`, la invalidación y la verificación de
 //   sesiones y refresh tokens son OBLIGATORIAS en cualquier desenlace, también si
@@ -17,37 +27,48 @@
 // - `sessionsAbsentAfterCheck` se escribe solo tras una verificación completa a 0
 //   y significa «sesiones observadas antes y que ya no existían al verificar»; no
 //   prueba que esta acción las invalidara.
-// - La contraseña nunca sale de aquí: ni en logs, ni en errores, ni en el resultado.
+// - La contraseña y el email nunca salen de aquí: ni en logs, ni en errores, ni en
+//   el resultado.
 // - No se revoca de forma inmediata una conexión ya autenticada: su JWT de acceso
 //   sigue valiendo hasta caducar (1 h por defecto en @convex-dev/auth).
 
 export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_INVALIDATION_ATTEMPTS = 3;
+export const AUDIT_WRITE_ATTEMPTS = 3;
+
+// Red de seguridad, NO el mecanismo normal de liberación: el límite de una action
+// del runtime Convex es de 30 min (10 en Node); se usa el más conservador + 5 min
+// de margen. Un registro no terminal más antiguo que esto no puede tener una
+// ejecución viva, aunque la plataforma dejara su función programada en
+// pending/inProgress o ya hubiera purgado su fila.
+export const LEASE_MS = 35 * 60 * 1000;
 
 // Una contraseña cargada por stdin desde Windows PowerShell 5.1 llega con un BOM
 // (U+FEFF) delante y un salto de línea (CRLF) detrás: se guardaría como un hash de
 // algo que nadie escribió y la cuenta quedaría bloqueada (verificado en dev). Se
-// rechaza ANTES de tocar nada. Devuelve el motivo (sin incluir el valor) o null.
+// rechaza ANTES de tocar nada. Rechaza las categorías Unicode Cc, Cf, Zl y Zp
+// (controles C0/C1, DEL, espacios de ancho cero y marcas bidi, BOM, U+2028/2029).
+// Los espacios iniciales/finales NO se prohíben ni se recortan: son significativos.
+// Devuelve el motivo (sin incluir el valor) o null.
+const FORBIDDEN_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 export function passwordProblem(password: string | undefined): string | null {
   if (!password) return "RESET_PASSWORD no está configurada";
   if (password.length < MIN_PASSWORD_LENGTH) {
     return `RESET_PASSWORD tiene menos de ${MIN_PASSWORD_LENGTH} caracteres`;
   }
-  for (const ch of password) {
-    const code = ch.codePointAt(0)!;
-    if (code <= 0x1f || code === 0x7f || code === 0xfeff) {
-      return (
-        "RESET_PASSWORD contiene un salto de línea, un carácter de control o un BOM (típico de " +
-        "cargarla por stdin desde PowerShell 5.1). Cárgala con 'npx convex env set RESET_PASSWORD' " +
-        "sin valor (entrada interactiva) o desde el panel web de Convex"
-      );
-    }
+  if (FORBIDDEN_CHARS.test(password)) {
+    return (
+      "RESET_PASSWORD contiene un salto de línea, un carácter de control, invisible o de formato, o un BOM " +
+      "(típico de cargarla por stdin desde PowerShell 5.1). Cárgala con 'npx convex env set RESET_PASSWORD' " +
+      "sin valor (entrada interactiva) o desde el panel web de Convex. Los espacios al principio o al " +
+      "final son significativos y no se recortan"
+    );
   }
   return null;
 }
-export const MAX_INVALIDATION_ATTEMPTS = 3;
 
 // Destinos que puede escribir `updateAudit`. No incluye `iniciado` (lo escribe la
-// apertura) ni `inconcluso_supersedido` (solo `supersederPrevios`).
+// solicitud) ni `inconcluso_supersedido` (solo `supersederPrevios`).
 export type AuditStatus =
   | "fallo_preparacion"
   | "cambio_no_confirmado"
@@ -61,6 +82,9 @@ export type AuditPatch = {
   sessionsAbsentAfterCheck?: number;
   sessionsRemaining?: number;
 };
+
+// Estados NO terminales: una ejecución en vuelo (o que murió sin cerrar su registro).
+export const NON_TERMINAL_STATUSES: readonly string[] = ["iniciado", "contrasena_cambiada"];
 
 // Transiciones permitidas. Solo `iniciado` y `contrasena_cambiada` admiten
 // cambios; todo estado terminal (completado, fallo_preparacion,
@@ -97,6 +121,31 @@ export function esPrevio(previo: { _creationTime: number }, record: { _creationT
   return previo._creationTime < record._creationTime;
 }
 
+// Estado de la función programada según la plataforma (`_scheduled_functions`);
+// `null` = la fila ya no existe.
+export type EstadoProgramado = "pending" | "inProgress" | "success" | "failed" | "canceled";
+
+// ¿Puede seguir viva la ejecución de un registro? La evidencia es el estado de la
+// función programada: solo pending/inProgress cuentan como vivas, y en cuanto
+// termina (success/failed/canceled) el bloqueo se libera AL INSTANTE, aunque su
+// registro de auditoría haya quedado sin cerrar. LEASE_MS solo corta los casos de
+// fallo de plataforma: una ejecución más antigua que el límite del runtime no puede
+// seguir viva. Una fila purgada (`null`) y reciente se trata como viva (conservador).
+export function ejecucionViva(estado: EstadoProgramado | null, startedAt: number, ahora: number) {
+  if (ahora - startedAt >= LEASE_MS) return false;
+  if (estado === null) return true;
+  return estado === "pending" || estado === "inProgress";
+}
+
+// Un registro bloquea nuevos resets si no es terminal y su ejecución puede seguir viva.
+export function registroBloquea(
+  registro: { status: string; startedAt: number },
+  estado: EstadoProgramado | null,
+  ahora: number,
+) {
+  return NON_TERMINAL_STATUSES.includes(registro.status) && ejecucionViva(estado, registro.startedAt, ahora);
+}
+
 export type SessionState = {
   sessionIds: string[];
   sessions: number;
@@ -104,11 +153,9 @@ export type SessionState = {
 };
 
 export type ResetDeps = {
-  allowedEmails(): string[];
   readPassword(): string | undefined;
-  findUserId(email: string): Promise<string | null>;
-  newRequestId(): string;
-  openAudit(requestId: string, userId: string): Promise<unknown>;
+  // Resuelve el email de la cuenta SIN que salga de la configuración (lanza si no puede).
+  resolveEmail(userId: string): Promise<string>;
   updateAudit(requestId: string, patch: AuditPatch): Promise<unknown>;
   sessionState(userId: string, knownSessionIds: string[]): Promise<SessionState>;
   modifyPassword(email: string, password: string): Promise<void>;
@@ -132,34 +179,99 @@ export function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-export async function runReset(deps: ResetDeps, rawEmail: string): Promise<ResetResult> {
-  const email = normalizeEmail(rawEmail);
-  if (!deps.allowedEmails().includes(email)) {
-    throw new Error("Esa cuenta no está permitida para restablecer la contraseña");
-  }
-  const password = deps.readPassword();
-  const problem = passwordProblem(password);
-  if (problem !== null || password === undefined) {
-    throw new Error(problem ?? "RESET_PASSWORD no está configurada");
-  }
-  const userId = await deps.findUserId(email);
-  if (userId === null) {
-    throw new Error("No existe una cuenta con ese email");
-  }
+// Mensajes canónicos. El operador solo recibe estos (nunca texto de plataforma).
+export const mensajePreparacion = (requestId: string) =>
+  `No se intentó cambiar la contraseña: falló la preparación previa (RESET_PASSWORD no válida, cuenta no ` +
+  `resoluble o lectura de sesiones) (requestId ${requestId}). Comprueba estadoRestablecimiento y vuelve a ejecutar.`;
 
-  const requestId = deps.newRequestId();
-  // Único punto en que un fallo de auditoría detiene la operación, y es antes de
-  // intentar cambiar nada.
-  await deps.openAudit(requestId, userId);
+export const mensajeC = (requestId: string) =>
+  `CONTRASEÑA CAMBIADA pero las sesiones NO se han invalidado: vuelve a ejecutar (requestId ${requestId})`;
 
-  // Mejor esfuerzo: un fallo aquí no puede impedir la invalidación.
-  const tryAudit = async (patch: AuditPatch) => {
-    try {
-      await deps.updateAudit(requestId, patch);
-      return true;
-    } catch {
-      return false;
+export const mensajeD1 = (requestId: string) =>
+  `CAMBIO DE CONTRASEÑA NO CONFIRMADO. La contraseña anterior puede seguir siendo válida y pueden ` +
+  `abrirse sesiones nuevas con ella; NO es un estado seguro. REINTENTA AHORA resetPassword, ` +
+  `inmediatamente y hasta obtener el resultado A (requestId ${requestId}). ` +
+  `NO retires RESET_PASSWORD ni cierres el incidente antes.`;
+
+export const mensajeD2 = (requestId: string) =>
+  `CRÍTICO: cambio de contraseña NO CONFIRMADO y sesiones/tokens NO invalidados; la contraseña ` +
+  `anterior puede seguir siendo válida. REINTENTA AHORA hasta obtener el resultado A ` +
+  `(requestId ${requestId}). NO retires RESET_PASSWORD.`;
+
+export const mensajeSinClasificar = (requestId: string) =>
+  `El restablecimiento terminó sin poder registrar su estado (requestId ${requestId}). Trátalo como D2: ` +
+  `la contraseña anterior puede seguir siendo válida y pueden quedar sesiones vivas; REINTENTA AHORA ` +
+  `hasta obtener el resultado A; NO retires RESET_PASSWORD.`;
+
+export const mensajeEnCurso = (requestId: string) =>
+  `El restablecimiento sigue en curso (requestId ${requestId}). No lances otro: consulta ` +
+  `adminAuth:resultadoReset con ese requestId hasta que termine.`;
+
+export type Ejecucion = EstadoProgramado | "desconocida";
+export type RegistroVista = {
+  estado: string;
+  sessionsAbsentAfterCheck?: number;
+  sessionsRemaining?: number;
+} | null;
+export type Clasificacion =
+  | { kind: "esperar" }
+  | { kind: "ok"; result: ResetResult }
+  | { kind: "error"; message: string };
+
+// Reconstruye el resultado SOLO a partir del estado de la plataforma y del registro
+// de auditoría; nunca de `state.error` ni de texto de excepciones.
+export function clasificarResultado(
+  requestId: string,
+  ejecucion: Ejecucion,
+  registro: RegistroVista,
+  previosSinResolver: number,
+): Clasificacion {
+  if (ejecucion === "pending" || ejecucion === "inProgress") return { kind: "esperar" };
+  const estado = registro?.estado;
+  if (ejecucion === "success") {
+    if (estado === "completado") {
+      return {
+        kind: "ok",
+        result: {
+          ok: true,
+          requestId,
+          ...(previosSinResolver > 0 ? { historialPrevioPendiente: true as const } : {}),
+        },
+      };
     }
+    if (estado === "iniciado" || estado === "contrasena_cambiada") {
+      return { kind: "ok", result: { ok: true, requestId, auditoriaPendiente: true } };
+    }
+    return { kind: "error", message: mensajeSinClasificar(requestId) };
+  }
+  // failed / canceled / desconocida
+  if (estado === "fallo_preparacion") return { kind: "error", message: mensajePreparacion(requestId) };
+  if (estado === "fallo_invalidacion") return { kind: "error", message: mensajeC(requestId) };
+  if (estado === "cambio_no_confirmado") {
+    const d1 = registro!.sessionsRemaining === 0 && registro!.sessionsAbsentAfterCheck !== undefined;
+    return { kind: "error", message: d1 ? mensajeD1(requestId) : mensajeD2(requestId) };
+  }
+  return { kind: "error", message: mensajeSinClasificar(requestId) };
+}
+
+export async function runReset(
+  deps: ResetDeps,
+  args: { requestId: string; userId: string },
+): Promise<ResetResult> {
+  const { requestId, userId } = args;
+
+  // Mejor esfuerzo: un fallo aquí no puede impedir la invalidación. Las escrituras
+  // se reintentan hasta AUDIT_WRITE_ATTEMPTS veces antes de rendirse.
+  const tryAudit = async (patch: AuditPatch) => {
+    for (let attempt = 1; attempt <= AUDIT_WRITE_ATTEMPTS; attempt++) {
+      try {
+        await deps.updateAudit(requestId, patch);
+        return true;
+      } catch {
+        // se reintenta
+      }
+    }
+    return false;
   };
   const log = (resultado: string) =>
     deps.log(`[resetPassword] requestId=${requestId} userId=${userId} resultado=${resultado}`);
@@ -167,15 +279,21 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
   // Preparación: aún no se ha intentado cambiar nada, así que aquí sí es seguro
   // afirmar que la contraseña no se tocó.
   const seen = new Set<string>();
+  let email: string;
+  let password: string;
   try {
+    const candidate = deps.readPassword();
+    if (passwordProblem(candidate) !== null || candidate === undefined) {
+      throw new Error("RESET_PASSWORD no válida");
+    }
+    password = candidate;
+    email = await deps.resolveEmail(userId);
     const before = await deps.sessionState(userId, []);
     before.sessionIds.forEach((id) => seen.add(id));
   } catch {
     await tryAudit({ status: "fallo_preparacion", finishedAt: deps.now() });
     log("fallo_preparacion");
-    throw new Error(
-      `No se intentó cambiar la contraseña: falló la lectura previa de sesiones (requestId ${requestId})`,
-    );
+    throw new Error(mensajePreparacion(requestId));
   }
 
   // Desde aquí, un error de `modifyPassword` NO demuestra que el hash no cambiara.
@@ -218,12 +336,7 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
         sessionsRemaining: 0,
       });
       log("D1");
-      throw new Error(
-        `CAMBIO DE CONTRASEÑA NO CONFIRMADO. La contraseña anterior puede seguir siendo válida y pueden ` +
-          `abrirse sesiones nuevas con ella; NO es un estado seguro. REINTENTA AHORA resetPassword, ` +
-          `inmediatamente y hasta obtener el resultado A (requestId ${requestId}). ` +
-          `NO retires RESET_PASSWORD ni cierres el incidente antes.`,
-      );
+      throw new Error(mensajeD1(requestId));
     }
     await tryAudit({
       status: "cambio_no_confirmado",
@@ -231,11 +344,7 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
       ...(alive !== undefined ? { sessionsRemaining: alive } : {}),
     });
     log("D2");
-    throw new Error(
-      `CRÍTICO: cambio de contraseña NO CONFIRMADO y sesiones/tokens NO invalidados; la contraseña ` +
-        `anterior puede seguir siendo válida. REINTENTA AHORA hasta obtener el resultado A ` +
-        `(requestId ${requestId}). NO retires RESET_PASSWORD.`,
-    );
+    throw new Error(mensajeD2(requestId));
   }
 
   // C. Cambio confirmado pero sesiones no invalidadas.
@@ -246,9 +355,7 @@ export async function runReset(deps: ResetDeps, rawEmail: string): Promise<Reset
       ...(alive !== undefined ? { sessionsRemaining: alive } : {}),
     });
     log("C");
-    throw new Error(
-      `CONTRASEÑA CAMBIADA pero las sesiones NO se han invalidado: vuelve a ejecutar (requestId ${requestId})`,
-    );
+    throw new Error(mensajeC(requestId));
   }
 
   const closed = await tryAudit({

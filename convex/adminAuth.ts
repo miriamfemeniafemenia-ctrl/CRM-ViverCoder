@@ -10,12 +10,16 @@ import {
 } from "./_generated/server";
 import {
   canTransition,
+  clasificarResultado,
+  type Ejecucion,
   esPrevio,
+  mensajeEnCurso,
   normalizeEmail,
   passwordProblem,
+  registroBloquea,
   runReset,
-  UNRESOLVED_STATUSES,
   type ResetResult,
+  UNRESOLVED_STATUSES,
 } from "./lib/passwordReset";
 
 // ARC-75 — Restablecer la contraseña de una de las 3 cuentas fijas. Todo es
@@ -25,11 +29,22 @@ import {
 // RESET_PASSWORD, cargada sin escribirla en la línea de comandos, y se borra
 // al terminar (solo tras un resultado A). Nunca es un argumento.
 //
-// Qué garantiza y qué no: tras el reset, la contraseña antigua deja de valer y se
-// borran las sesiones y los refresh tokens de la cuenta, así que no se pueden
-// abrir ni renovar sesiones con la credencial anterior. NO revoca de forma
-// inmediata una pestaña ya autenticada: su JWT de acceso sigue valiendo hasta
-// caducar (1 hora por defecto en @convex-dev/auth 0.0.94; auth.ts no la cambia).
+// Qué garantiza y qué no: tras un resultado A, la contraseña antigua deja de valer
+// y se borran las sesiones y los refresh tokens de la cuenta, así que no se pueden
+// abrir ni renovar sesiones con la credencial anterior. En D1/D2 (cambio no
+// confirmado) la contraseña anterior PUEDE seguir siendo válida hasta alcanzar A.
+// NO revoca de forma inmediata una pestaña ya autenticada: su JWT de acceso sigue
+// valiendo hasta caducar (1 hora por defecto en @convex-dev/auth 0.0.94; auth.ts
+// no la cambia).
+//
+// Arquitectura: `resetPassword` (la que lanza el operador) solo SOLICITA el reset y
+// espera su resultado; el trabajo lo hace `ejecutarReset`, una action PROGRAMADA.
+// El estado de una función programada lo escribe la plataforma, y es la evidencia
+// de que una ejecución sigue viva (exclusión mutua global): no depende de ninguna
+// escritura de auditoría que pueda fallar. A la acción programada solo se le pasan
+// `{ requestId, userId }`: Convex conserva sus argumentos días en
+// `_scheduled_functions`, y el email no debe quedar ahí. Ninguna función de este
+// archivo devuelve emails.
 //
 // La lógica y el orden de los pasos están en lib/passwordReset.ts.
 
@@ -38,17 +53,14 @@ const EXECUTOR = "acceso administrativo Convex (CLI)";
 // Las 3 cuentas permitidas, por el nombre de su variable (las mismas que usa
 // seed.ts). Sin emails en el código.
 const ACCOUNT_NAMES = ["MIRIAM", "MONICA", "ANTONIO"] as const;
+type AccountName = (typeof ACCOUNT_NAMES)[number];
 
-function allowedEmails() {
-  return ACCOUNT_NAMES.map((name) => process.env[`SEED_${name}_EMAIL`])
-    .filter((email): email is string => Boolean(email))
-    .map(normalizeEmail);
-}
+// Tiempo máximo que espera la envoltura al resultado (ms). Se puede acortar con la
+// variable RESET_ESPERA_MAX_MS (no sensible), pensada solo para pruebas.
+const ESPERA_MAX_MS_POR_DEFECTO = 120_000;
 
 // Búsqueda ÚNICA de la cuenta: provider "password" y providerAccountId igual al
-// email normalizado. La usan `findPasswordAccount` y `diagnosticoCuentas`, así que
-// una cuenta de otro provider con el mismo id no cuenta en ninguna. Devuelve solo
-// el id: nunca el documento (lleva el hash del secreto).
+// email normalizado. Devuelve solo el id: nunca el documento (lleva el hash).
 async function buscarCuentaPassword(ctx: QueryCtx, email: string) {
   const account = await ctx.db
     .query("authAccounts")
@@ -59,26 +71,68 @@ async function buscarCuentaPassword(ctx: QueryCtx, email: string) {
   return account?.userId ?? null;
 }
 
-export const findPasswordAccount = internalQuery({
-  args: { email: v.string() },
-  handler: async (ctx, args) => buscarCuentaPassword(ctx, normalizeEmail(args.email)),
-});
+// Configuración ESTRICTA de las 3 cuentas (falla cerrada). Los emails nunca salen de
+// este helper: lo consumen funciones que devuelven solo booleanos, números e ids.
+// `alineada` exige a la vez: las tres variables configuradas, emails distintos, las
+// tres con cuenta password real y los tres userId DISTINTOS (Convex Auth puede
+// asociar varias cuentas a un mismo usuario; con un userId repetido no se sabría
+// qué cuenta se pidió). No se filtra ninguna variable ausente.
+async function leerConfiguracion(ctx: QueryCtx) {
+  const cuentas: {
+    nombre: AccountName;
+    variableConfigurada: boolean;
+    email: string | null;
+    userId: Id<"users"> | null;
+  }[] = [];
+  for (const nombre of ACCOUNT_NAMES) {
+    const raw = process.env[`SEED_${nombre}_EMAIL`];
+    const email = raw ? normalizeEmail(raw) : null;
+    const userId = email ? await buscarCuentaPassword(ctx, email) : null;
+    cuentas.push({ nombre, variableConfigurada: Boolean(raw), email, userId });
+  }
+  const emails = cuentas.map((c) => c.email);
+  const userIds = cuentas.map((c) => c.userId);
+  const alineada =
+    cuentas.every((c) => c.variableConfigurada && c.email !== null && c.userId !== null) &&
+    new Set(emails).size === cuentas.length &&
+    new Set(userIds).size === cuentas.length;
+  return { cuentas, alineada };
+}
+
+// Estado de la función programada de un registro según la plataforma (o null si la
+// fila ya no existe).
+async function estadoProgramado(ctx: QueryCtx, programadoId: Id<"_scheduled_functions">) {
+  const job = await ctx.db.system.get(programadoId);
+  return job ? job.state.kind : null;
+}
 
 // Solo lectura. Antes de un reset, comprueba que las tres variables SEED_*_EMAIL
-// están alineadas con cuentas reales (si no, `resetPassword` falla cerrada). Solo
+// están alineadas con cuentas reales (si no, el reset falla cerrado). Solo
 // devuelve el nombre de cada variable y booleanos: nunca emails ni hashes.
 export const diagnosticoCuentas = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const cuentas = [];
-    for (const nombre of ACCOUNT_NAMES) {
-      const raw = process.env[`SEED_${nombre}_EMAIL`];
-      const variableConfigurada = Boolean(raw);
-      const cuentaEncontrada =
-        variableConfigurada && (await buscarCuentaPassword(ctx, normalizeEmail(raw!))) !== null;
-      cuentas.push({ nombre, variableConfigurada, cuentaEncontrada });
-    }
-    return { cuentas, todasAlineadas: cuentas.every((c) => c.cuentaEncontrada) };
+    const cfg = await leerConfiguracion(ctx);
+    return {
+      cuentas: cfg.cuentas.map((c) => ({
+        nombre: c.nombre,
+        variableConfigurada: c.variableConfigurada,
+        cuentaEncontrada: c.userId !== null,
+      })),
+      todasAlineadas: cfg.alineada,
+    };
+  },
+});
+
+// Para la acción programada: de `userId` a NOMBRE de variable ("MIRIAM"…). No es
+// PII y evita pasar el email como argumento programado. Null si la configuración no
+// está alineada o el usuario no es de los tres.
+export const cuentaDeUsuario = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const cfg = await leerConfiguracion(ctx);
+    if (!cfg.alineada) return null;
+    return cfg.cuentas.find((c) => c.userId === args.userId)?.nombre ?? null;
   },
 });
 
@@ -107,18 +161,57 @@ export const sessionState = internalQuery({
   },
 });
 
-// Los obligatorios llevan valor al insertar; `sessionsAbsentAfterCheck` y el resto
-// de opcionales NO se inicializan: ausente = no se verificó.
-export const openAudit = internalMutation({
-  args: { requestId: v.string(), userId: v.id("users") },
-  handler: async (ctx, args) => {
+// Fase previa, ATÓMICA: valida la configuración estricta, la lista cerrada y
+// RESET_PASSWORD, comprueba la exclusión mutua GLOBAL (un solo reset vivo en todo
+// el sistema: RESET_PASSWORD es una variable global y no se liga a la solicitud, y
+// si cambiara entre la solicitud y la ejecución la acción pendiente aplicaría la
+// contraseña preparada para otra cuenta), programa el trabajo con identificadores
+// opacos e inserta el registro `iniciado`. Si algo falla no queda nada.
+export const solicitarReset = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, args): Promise<{ requestId: string }> => {
+    const cfg = await leerConfiguracion(ctx);
+    if (!cfg.alineada) {
+      throw new Error("Configuración no alineada: ejecuta adminAuth:diagnosticoCuentas");
+    }
+    const cuenta = cfg.cuentas.find((c) => c.email === normalizeEmail(args.email));
+    if (!cuenta || cuenta.userId === null) {
+      throw new Error("Esa cuenta no está permitida para restablecer la contraseña");
+    }
+    const problem = passwordProblem(process.env.RESET_PASSWORD);
+    if (problem !== null) throw new Error(problem);
+
+    // Exclusión mutua global: cualquier registro no terminal de CUALQUIERA de las
+    // tres cuentas cuya función programada siga pending/inProgress bloquea.
+    const ahora = Date.now();
+    for (const c of cfg.cuentas) {
+      const registros = await ctx.db
+        .query("passwordResetAudit")
+        .withIndex("by_userId", (q) => q.eq("userId", c.userId!))
+        .collect();
+      for (const registro of registros) {
+        const estado = await estadoProgramado(ctx, registro.programadoId);
+        if (registroBloquea(registro, estado, ahora)) {
+          throw new Error(mensajeEnCurso(registro.requestId));
+        }
+      }
+    }
+
+    const requestId = crypto.randomUUID();
+    // Solo identificadores opacos: nunca el email ni la contraseña.
+    const programadoId = await ctx.scheduler.runAfter(0, internal.adminAuth.ejecutarReset, {
+      requestId,
+      userId: cuenta.userId,
+    });
     await ctx.db.insert("passwordResetAudit", {
-      requestId: args.requestId,
-      userId: args.userId,
-      startedAt: Date.now(),
+      requestId,
+      userId: cuenta.userId,
+      startedAt: ahora,
       status: "iniciado",
       executor: EXECUTOR,
+      programadoId,
     });
+    return { requestId };
   },
 });
 
@@ -157,8 +250,9 @@ export const updateAudit = internalMutation({
 // Marca los registros previos sin resolver del MISMO usuario como inconclusos,
 // con referencia al reset completado que los sustituye. Solo con un `requestId`
 // en `completado`; excluye el propio registro y exige orden causal estricto
-// (`esPrevio`: creados ANTES); idempotente (solo actúa sobre los que siguen sin
-// resolver). Es el único camino que mueve registros terminales a
+// (`esPrevio`: creados ANTES); no toca una ejecución que siga viva (por la
+// exclusión mutua no debería existir); idempotente (solo actúa sobre los que
+// siguen sin resolver). Es el único camino que mueve registros terminales a
 // `inconcluso_supersedido`. No afirma que hubiera o no cambio de contraseña en los
 // previos.
 export const supersederPrevios = internalMutation({
@@ -175,6 +269,7 @@ export const supersederPrevios = internalMutation({
       .query("passwordResetAudit")
       .withIndex("by_userId", (q) => q.eq("userId", record.userId))
       .collect();
+    const ahora = Date.now();
     let superseded = 0;
     for (const previo of previos) {
       if (
@@ -184,6 +279,8 @@ export const supersederPrevios = internalMutation({
       ) {
         continue;
       }
+      const estado = await estadoProgramado(ctx, previo.programadoId);
+      if (registroBloquea(previo, estado, ahora)) continue;
       await ctx.db.patch(previo._id, {
         status: "inconcluso_supersedido",
         supersededBy: record.requestId,
@@ -194,39 +291,67 @@ export const supersederPrevios = internalMutation({
   },
 });
 
-// Registros sin resolver (y no supersedidos) de las cuentas permitidas. Consulta
-// el índice `by_userId` por usuario: no escanea la tabla completa.
-export const contarSinResolver = internalQuery({
-  args: { emails: v.array(v.string()) },
+// Registros previos (de este usuario) todavía sin resolver: sirve a la envoltura
+// para avisar de `historialPrevioPendiente`. Solo devuelve un número.
+export const previosSinResolver = internalQuery({
+  args: { requestId: v.string() },
   handler: async (ctx, args) => {
-    let total = 0;
-    for (const email of new Set(args.emails.map(normalizeEmail))) {
-      const userId = await buscarCuentaPassword(ctx, email);
-      if (userId === null) continue;
-      const records = await ctx.db
-        .query("passwordResetAudit")
-        .withIndex("by_userId", (q) => q.eq("userId", userId))
-        .collect();
-      total += records.filter((r) => UNRESOLVED_STATUSES.includes(r.status)).length;
-    }
-    return total;
+    const record = await ctx.db
+      .query("passwordResetAudit")
+      .withIndex("by_requestId", (q) => q.eq("requestId", args.requestId))
+      .unique();
+    if (record === null) return 0;
+    const registros = await ctx.db
+      .query("passwordResetAudit")
+      .withIndex("by_userId", (q) => q.eq("userId", record.userId))
+      .collect();
+    return registros.filter(
+      (r) => r._id !== record._id && esPrevio(r, record) && UNRESOLVED_STATUSES.includes(r.status),
+    ).length;
   },
 });
 
-export const resetPassword = internalAction({
-  args: { email: v.string() },
+// Vista segura de una ejecución: SOLO códigos. No devuelve `state.error` de la
+// plataforma (puede llevar detalles internos o PII), ni userId, ni emails.
+export const resultadoReset = internalQuery({
+  args: { requestId: v.string() },
+  handler: async (ctx, args) => {
+    const record = await ctx.db
+      .query("passwordResetAudit")
+      .withIndex("by_requestId", (q) => q.eq("requestId", args.requestId))
+      .unique();
+    if (record === null) {
+      return { ejecucion: "desconocida" as Ejecucion, registro: null };
+    }
+    const estado = await estadoProgramado(ctx, record.programadoId);
+    return {
+      ejecucion: (estado ?? "desconocida") as Ejecucion,
+      registro: {
+        estado: record.status as string,
+        sessionsAbsentAfterCheck: record.sessionsAbsentAfterCheck,
+        sessionsRemaining: record.sessionsRemaining,
+      },
+    };
+  },
+});
+
+// El trabajo: action PROGRAMADA (un único intento; Convex no reintenta actions).
+// Firma definitiva `{ requestId, userId }`: sin email ni contraseña en los argumentos
+// que la plataforma conserva. El email se resuelve aquí por nombre de variable.
+export const ejecutarReset = internalAction({
+  args: { requestId: v.string(), userId: v.id("users") },
   handler: async (ctx, args): Promise<ResetResult> =>
     runReset(
       {
-        allowedEmails,
         readPassword: () => process.env.RESET_PASSWORD,
-        findUserId: (email) => ctx.runQuery(internal.adminAuth.findPasswordAccount, { email }),
-        newRequestId: () => crypto.randomUUID(),
-        openAudit: (requestId, userId) =>
-          ctx.runMutation(internal.adminAuth.openAudit, {
-            requestId,
+        resolveEmail: async (userId) => {
+          const nombre = await ctx.runQuery(internal.adminAuth.cuentaDeUsuario, {
             userId: userId as Id<"users">,
-          }),
+          });
+          const raw = nombre ? process.env[`SEED_${nombre}_EMAIL`] : undefined;
+          if (!raw) throw new Error("No se pudo resolver la cuenta");
+          return normalizeEmail(raw);
+        },
         updateAudit: (requestId, patch) =>
           ctx.runMutation(internal.adminAuth.updateAudit, { requestId, ...patch }),
         sessionState: (userId, knownSessionIds) =>
@@ -246,13 +371,76 @@ export const resetPassword = internalAction({
         now: () => Date.now(),
         log: (message) => console.log(message),
       },
-      args.email,
+      { requestId: args.requestId, userId: args.userId },
     ),
 });
 
+// La envoltura que lanza el operador: solicita el reset, espera a que termine la
+// función programada y devuelve o lanza SOLO mensajes canónicos reconstruidos desde
+// el estado de la plataforma y el registro de auditoría (nunca texto de excepciones).
+export const resetPassword = internalAction({
+  args: { email: v.string() },
+  handler: async (ctx, args): Promise<ResetResult> => {
+    const { requestId } = await ctx.runMutation(internal.adminAuth.solicitarReset, {
+      email: args.email,
+    });
+    const configurado = Number(process.env.RESET_ESPERA_MAX_MS);
+    const esperaMax = configurado > 0 ? configurado : ESPERA_MAX_MS_POR_DEFECTO;
+    const limite = Date.now() + esperaMax;
+    let pausa = 200;
+    for (;;) {
+      const vista = await ctx.runQuery(internal.adminAuth.resultadoReset, { requestId });
+      const terminada = vista.ejecucion !== "pending" && vista.ejecucion !== "inProgress";
+      const previos =
+        terminada && vista.registro?.estado === "completado"
+          ? await ctx.runQuery(internal.adminAuth.previosSinResolver, { requestId })
+          : 0;
+      const clasificacion = clasificarResultado(requestId, vista.ejecucion, vista.registro, previos);
+      if (clasificacion.kind === "ok") return clasificacion.result;
+      if (clasificacion.kind === "error") throw new Error(clasificacion.message);
+      if (Date.now() >= limite) throw new Error(mensajeEnCurso(requestId));
+      await new Promise((resolve) => setTimeout(resolve, pausa));
+      pausa = Math.min(pausa + 200, 1000);
+    }
+  },
+});
+
+// Registros sin resolver y ejecución viva de las tres cuentas. Con la
+// configuración incompleta NUNCA devuelve un 0 apto para cierre: devuelve null.
+// Consulta el índice `by_userId` por usuario: no escanea la tabla completa.
+export const estadoCuentas = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const cfg = await leerConfiguracion(ctx);
+    if (!cfg.alineada) {
+      return {
+        alineada: false,
+        registrosSinResolver: null as number | null,
+        resetEnCurso: null as boolean | null,
+      };
+    }
+    const ahora = Date.now();
+    let registrosSinResolver = 0;
+    let resetEnCurso = false;
+    for (const c of cfg.cuentas) {
+      const registros = await ctx.db
+        .query("passwordResetAudit")
+        .withIndex("by_userId", (q) => q.eq("userId", c.userId!))
+        .collect();
+      for (const registro of registros) {
+        if (UNRESOLVED_STATUSES.includes(registro.status)) registrosSinResolver++;
+        const estado = await estadoProgramado(ctx, registro.programadoId);
+        if (registroBloquea(registro, estado, ahora)) resetEnCurso = true;
+      }
+    }
+    return { alineada: true, registrosSinResolver: registrosSinResolver as number | null, resetEnCurso: resetEnCurso as boolean | null };
+  },
+});
+
 // Permite comprobar que RESET_PASSWORD está cargada y es válida, o que se borró,
-// sin enumerar variables ni leer su valor, y cuántos registros siguen sin resolver. El incidente solo se da por
-// cerrado con resultado A y `registrosSinResolver` en 0.
+// sin enumerar variables ni leer su valor, y si el cierre del incidente es seguro.
+// `cierrePermitido` es el criterio único: configuración alineada, 0 registros sin
+// resolver y ningún reset vivo.
 export const estadoRestablecimiento = internalAction({
   args: {},
   handler: async (
@@ -260,14 +448,22 @@ export const estadoRestablecimiento = internalAction({
   ): Promise<{
     contrasenaConfigurada: boolean;
     contrasenaValida: boolean;
-    registrosSinResolver: number;
-  }> => ({
-    contrasenaConfigurada: Boolean(process.env.RESET_PASSWORD),
-    // true si pasa la misma validación que resetPassword (longitud, sin BOM ni
-    // saltos de línea). Comprobar antes de ejecutar el reset; no expone el valor.
-    contrasenaValida: passwordProblem(process.env.RESET_PASSWORD) === null,
-    registrosSinResolver: await ctx.runQuery(internal.adminAuth.contarSinResolver, {
-      emails: allowedEmails(),
-    }),
-  }),
+    configuracionAlineada: boolean;
+    registrosSinResolver: number | null;
+    resetEnCurso: boolean | null;
+    cierrePermitido: boolean;
+  }> => {
+    const cuentas = await ctx.runQuery(internal.adminAuth.estadoCuentas, {});
+    return {
+      contrasenaConfigurada: Boolean(process.env.RESET_PASSWORD),
+      // true si pasa la misma validación que el reset (longitud, sin BOM ni
+      // saltos de línea ni caracteres invisibles). No expone el valor.
+      contrasenaValida: passwordProblem(process.env.RESET_PASSWORD) === null,
+      configuracionAlineada: cuentas.alineada,
+      registrosSinResolver: cuentas.registrosSinResolver,
+      resetEnCurso: cuentas.resetEnCurso,
+      cierrePermitido:
+        cuentas.alineada && cuentas.registrosSinResolver === 0 && cuentas.resetEnCurso === false,
+    };
+  },
 });

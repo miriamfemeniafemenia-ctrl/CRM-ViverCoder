@@ -48,6 +48,9 @@ export default defineSchema({
       v.literal("inconcluso_supersedido"),
     ),
     executor: v.string(),
+    // La función programada que hace el trabajo: su estado (lo escribe la
+    // plataforma) dice si la ejecución sigue viva, sin depender de este registro.
+    programadoId: v.id("_scheduled_functions"),
     finishedAt: v.optional(v.number()),
     // Sesiones observadas antes y que ya no existían al verificar; NO prueba que
     // esta acción las invalidara. Solo se escribe tras una verificación completa a

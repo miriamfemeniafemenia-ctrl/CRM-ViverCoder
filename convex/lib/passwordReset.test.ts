@@ -1,40 +1,41 @@
-// Pruebas de la lógica del restablecimiento de contraseña (ARC-75) con
-// dependencias simuladas: fallos parciales, orden de los pasos, resultados
-// A/B/C/D1/D2 y que la contraseña no sale nunca en logs, errores ni resultado.
+// Pruebas de la lógica pura del restablecimiento de contraseña (ARC-75): el
+// trabajo `runReset` con dependencias simuladas (fallos parciales, orden de los
+// pasos, resultados A/B/C/D1/D2), el guard de la contraseña, la regla de «ejecución
+// viva» (estado de la función programada) y la clasificación de resultados.
 import { describe, expect, test } from "vitest";
 import {
   type AuditPatch,
   type ResetDeps,
+  AUDIT_WRITE_ATTEMPTS,
+  LEASE_MS,
   MAX_INVALIDATION_ATTEMPTS,
   canTransition,
+  clasificarResultado,
+  ejecucionViva,
   esPrevio,
   passwordProblem,
+  registroBloquea,
   runReset,
 } from "./passwordReset";
 
 const EMAIL = "miriam@arco.test";
 const PASSWORD = "clave-secreta-de-prueba";
+const ARGS = { requestId: "req-1", userId: "user1" };
 
 type Harness = ReturnType<typeof harness>;
 
 function harness(overrides: Partial<ResetDeps> = {}) {
   const calls: string[] = [];
   const logs: string[] = [];
-  const audit: { requestId: string; userId: string; patches: AuditPatch[] }[] = [];
+  const patches: AuditPatch[] = [];
   // Estado simulado de la cuenta: contraseña cambiada y sesiones vivas.
   const state = { passwordChanged: false, sessions: 2 };
   const deps: ResetDeps = {
-    allowedEmails: () => [EMAIL, "monica@arco.test"],
     readPassword: () => PASSWORD,
-    findUserId: async () => "user1",
-    newRequestId: () => "req-1",
-    openAudit: async (requestId, userId) => {
-      calls.push("openAudit");
-      audit.push({ requestId, userId, patches: [] });
-    },
-    updateAudit: async (requestId, patch) => {
+    resolveEmail: async () => EMAIL,
+    updateAudit: async (_requestId, patch) => {
       calls.push(`updateAudit:${patch.status}`);
-      audit.find((a) => a.requestId === requestId)?.patches.push(patch);
+      patches.push(patch);
     },
     sessionState: async () => {
       calls.push("sessionState");
@@ -60,7 +61,7 @@ function harness(overrides: Partial<ResetDeps> = {}) {
     log: (m) => logs.push(m),
     ...overrides,
   };
-  return { deps, calls, logs, audit, state };
+  return { deps, calls, logs, patches, state };
 }
 
 const failing = (message = "fallo simulado") => async () => {
@@ -76,75 +77,77 @@ const rejection = async (p: Promise<unknown>) => {
   throw new Error("Se esperaba un rechazo");
 };
 
-const finalPatch = (h: Harness) => h.audit[0]?.patches.at(-1);
+const finalPatch = (h: Harness) => h.patches.at(-1);
 const finalStatus = (h: Harness) => finalPatch(h)?.status;
 
-describe("runReset: validaciones previas (no tocan nada)", () => {
-  test("email fuera de la lista de las 3 cuentas → rechaza sin abrir auditoría ni cambiar nada", async () => {
-    const h = harness();
-    await rejection(runReset(h.deps, "otra@arco.test"));
-    expect(h.calls).toEqual([]);
-  });
-
-  test("sin contraseña o con menos de 8 caracteres → rechaza sin tocar nada y sin imprimirla", async () => {
-    for (const value of [undefined, "", "corta"]) {
-      const h = harness({ readPassword: () => value });
-      const message = await rejection(runReset(h.deps, EMAIL));
-      expect(h.calls).toEqual([]);
-      if (value) expect(message).not.toContain(value);
-    }
-  });
-
-  test("contraseña con BOM, salto de línea o carácter de control (stdin de PowerShell 5.1) → rechaza sin tocar nada ni imprimirla", async () => {
-    const polluted = [
-      `﻿${PASSWORD}\r\n`, // lo que produce `valor | npx convex env set` en PowerShell 5.1
-      `${PASSWORD}\r\n`,
-      `${PASSWORD}\n`,
-      `﻿${PASSWORD}`,
-      `${PASSWORD}\t`,
-      `${PASSWORD}\u0000`,
-    ];
-    for (const value of polluted) {
-      const h = harness({ readPassword: () => value });
-      const message = await rejection(runReset(h.deps, EMAIL));
-      expect(h.calls).toEqual([]);
-      expect(message).toContain("BOM");
-      expect(message).not.toContain(PASSWORD);
-    }
-  });
-
-  test("passwordProblem: acepta contraseñas válidas (también con espacios y símbolos internos)", () => {
-    for (const ok of ["abcdefgh", "con espacios dentro 1", "ñandú-€-ÁÉ-123", PASSWORD]) {
+describe("passwordProblem (guard de RESET_PASSWORD)", () => {
+  test("acepta contraseñas válidas: espacios intermedios, INICIALES y FINALES (significativos), símbolos y acentos", () => {
+    for (const ok of [
+      "abcdefgh",
+      "con espacios dentro 1",
+      "  espacios al principio",
+      "espacios al final   ",
+      "ñandú-€-ÁÉ-123",
+      PASSWORD,
+    ]) {
       expect(passwordProblem(ok)).toBeNull();
     }
+  });
+
+  test("rechaza ausente, corta y los caracteres Cc, Cf, Zl y Zp (BOM, CR/LF, invisibles, bidi, separadores de línea)", () => {
     expect(passwordProblem(undefined)).not.toBeNull();
+    expect(passwordProblem("")).not.toBeNull();
     expect(passwordProblem("corta")).not.toBeNull();
-  });
-
-  test("cuenta inexistente → rechaza y no abre auditoría", async () => {
-    const h = harness({ findUserId: async () => null });
-    await rejection(runReset(h.deps, EMAIL));
-    expect(h.calls).toEqual([]);
-  });
-
-  test("si no se puede abrir la auditoría, no se cambia la contraseña", async () => {
-    const h = harness({ openAudit: failing() });
-    await rejection(runReset(h.deps, EMAIL));
-    expect(h.calls).not.toContain("modifyPassword");
-    expect(h.calls).not.toContain("invalidateSessions");
-  });
-
-  test("mayúsculas y espacios en el email se normalizan", async () => {
-    const h = harness();
-    const result = await runReset(h.deps, `  ${EMAIL.toUpperCase()} `);
-    expect(result.ok).toBe(true);
+    const malos = [
+      "﻿", // BOM (Cf)
+      "\r\n",
+      "\n",
+      "\t",
+      "\u0000",
+      "\u007F", // DEL
+      "\u0085", // C1 (Cc)
+      "​", // espacio de ancho cero (Cf)
+      "‎", // marca izquierda-derecha (Cf)
+      "‏",
+      "⁠", // word joiner (Cf)
+      "‮", // control bidi (Cf)
+      " ", // separador de línea (Zl)
+      " ", // separador de párrafo (Zp)
+    ];
+    for (const ch of malos) {
+      for (const value of [`${PASSWORD}${ch}`, `${ch}${PASSWORD}`, `${PASSWORD.slice(0, 5)}${ch}${PASSWORD.slice(5)}`]) {
+        const problem = passwordProblem(value);
+        expect(problem, JSON.stringify(ch)).not.toBeNull();
+        expect(problem).not.toContain(PASSWORD);
+      }
+    }
   });
 });
 
 describe("runReset: preparación (fallo_preparacion)", () => {
-  test("la lectura previa de sesiones falla → fallo_preparacion, no se intenta cambiar ni invalidar nada", async () => {
+  test("RESET_PASSWORD deja de ser válida → fallo_preparacion y no se toca nada", async () => {
+    for (const value of [undefined, "corta", `﻿${PASSWORD}\r\n`]) {
+      const h = harness({ readPassword: () => value });
+      const message = await rejection(runReset(h.deps, ARGS));
+      expect(finalStatus(h)).toBe("fallo_preparacion");
+      expect(h.calls).not.toContain("modifyPassword");
+      expect(h.calls).not.toContain("invalidateSessions");
+      expect(message).toContain("No se intentó cambiar la contraseña");
+      expect(message).not.toContain(PASSWORD);
+    }
+  });
+
+  test("no se puede resolver la cuenta → fallo_preparacion", async () => {
+    const h = harness({ resolveEmail: failing("sin cuenta") });
+    const message = await rejection(runReset(h.deps, ARGS));
+    expect(finalStatus(h)).toBe("fallo_preparacion");
+    expect(h.calls).not.toContain("modifyPassword");
+    expect(message).toContain("No se intentó cambiar la contraseña");
+  });
+
+  test("la lectura previa de sesiones falla → fallo_preparacion, sin cambiar ni invalidar nada", async () => {
     const h = harness({ sessionState: failing("consulta caída") });
-    const message = await rejection(runReset(h.deps, EMAIL));
+    const message = await rejection(runReset(h.deps, ARGS));
     expect(finalStatus(h)).toBe("fallo_preparacion");
     expect(h.calls).not.toContain("modifyPassword");
     expect(h.calls).not.toContain("invalidateSessions");
@@ -155,11 +158,10 @@ describe("runReset: preparación (fallo_preparacion)", () => {
 });
 
 describe("runReset: resultado A", () => {
-  test("orden: auditoría → cambio → invalidación → verificación → completado → supersesión", async () => {
+  test("orden: cambio → invalidación → verificación → completado → supersesión", async () => {
     const h = harness();
-    const result = await runReset(h.deps, EMAIL);
+    const result = await runReset(h.deps, ARGS);
     expect(result).toEqual({ ok: true, requestId: "req-1", registrosSupersedidos: 1 });
-    expect(h.calls.indexOf("openAudit")).toBeLessThan(h.calls.indexOf("modifyPassword"));
     expect(h.calls.indexOf("modifyPassword")).toBeLessThan(h.calls.indexOf("invalidateSessions"));
     expect(h.calls.indexOf("invalidateSessions")).toBeLessThan(
       h.calls.indexOf("updateAudit:completado"),
@@ -170,14 +172,15 @@ describe("runReset: resultado A", () => {
       sessionsRemaining: 0,
       sessionsAbsentAfterCheck: 2,
     });
-    // El campo antiguo ya no existe.
     expect(finalPatch(h)).not.toHaveProperty("sessionsInvalidated");
   });
 
-  test("la contraseña no aparece en logs, auditoría ni resultado", async () => {
+  test("la contraseña y el email no aparecen en logs, auditoría ni resultado", async () => {
     const h = harness();
-    const result = await runReset(h.deps, EMAIL);
-    expect(JSON.stringify([h.logs, h.audit, result])).not.toContain(PASSWORD);
+    const result = await runReset(h.deps, ARGS);
+    const todo = JSON.stringify([h.logs, h.patches, result]);
+    expect(todo).not.toContain(PASSWORD);
+    expect(todo).not.toContain(EMAIL);
   });
 
   test("una invalidación que falla una vez se reintenta y acaba en A", async () => {
@@ -188,7 +191,7 @@ describe("runReset: resultado A", () => {
       if (++n === 1) throw new Error("fallo transitorio");
       h.state.sessions = 0;
     };
-    const result = await runReset(h.deps, EMAIL);
+    const result = await runReset(h.deps, ARGS);
     expect(result.ok).toBe(true);
     expect(n).toBe(2);
     expect(finalStatus(h)).toBe("completado");
@@ -200,33 +203,52 @@ describe("runReset: resultado A", () => {
     h.deps.invalidateSessions = async () => {
       h.calls.push("invalidateSessions");
       invalidations++;
-      // La primera invalidación deja una sesión nueva (carrera); la segunda la borra.
       h.state.sessions = invalidations === 1 ? 1 : 0;
     };
-    const result = await runReset(h.deps, EMAIL);
+    const result = await runReset(h.deps, ARGS);
     expect(result.ok).toBe(true);
     expect(invalidations).toBe(2);
+  });
+});
+
+describe("runReset: escrituras de auditoría con reintentos", () => {
+  test("una escritura de cierre que falla 2 veces y acierta a la 3.ª deja el registro completado (A, no B)", async () => {
+    let fallos = 0;
+    const h = harness();
+    h.deps.updateAudit = async (_id, patch) => {
+      h.calls.push(`updateAudit:${patch.status}`);
+      if (patch.status === "completado" && fallos < AUDIT_WRITE_ATTEMPTS - 1) {
+        fallos++;
+        throw new Error("auditoría caída");
+      }
+      h.patches.push(patch);
+    };
+    const result = await runReset(h.deps, ARGS);
+    expect(fallos).toBe(2);
+    expect(result).toEqual({ ok: true, requestId: "req-1", registrosSupersedidos: 1 });
+    expect(finalStatus(h)).toBe("completado");
+  });
+
+  test("si las 3 escrituras de cierre fallan → B (no supersede)", async () => {
+    const h = harness();
+    h.deps.updateAudit = async (_id, patch) => {
+      h.calls.push(`updateAudit:${patch.status}`);
+      if (patch.status === "completado") throw new Error("auditoría caída");
+    };
+    const result = await runReset(h.deps, ARGS);
+    expect(result).toEqual({ ok: true, requestId: "req-1", auditoriaPendiente: true });
+    expect(h.calls.filter((c) => c === "updateAudit:completado")).toHaveLength(AUDIT_WRITE_ATTEMPTS);
+    expect(h.calls).not.toContain("superseder");
   });
 });
 
 describe("runReset: B (auditoría pendiente) y C (sesiones no invalidadas)", () => {
   test("si toda la auditoría falla tras cambiar la contraseña, la invalidación SIGUE y es resultado B", async () => {
     const h = harness({ updateAudit: failing("auditoría caída") });
-    const result = await runReset(h.deps, EMAIL);
+    const result = await runReset(h.deps, ARGS);
     expect(h.calls).toContain("invalidateSessions");
     expect(result).toEqual({ ok: true, requestId: "req-1", auditoriaPendiente: true });
     expect(h.calls).not.toContain("superseder");
-  });
-
-  test("falla solo el estado final: B, y el reset ya había invalidado las sesiones", async () => {
-    const h = harness();
-    h.deps.updateAudit = async (_id, patch) => {
-      h.calls.push(`updateAudit:${patch.status}`);
-      if (patch.status === "completado") throw new Error("auditoría caída");
-    };
-    const result = await runReset(h.deps, EMAIL);
-    expect(result.auditoriaPendiente).toBe(true);
-    expect(h.calls).toContain("invalidateSessions");
   });
 
   test("la invalidación falla siempre → C: lanza, fallo_invalidacion, solo sessionsRemaining, sin supersesión", async () => {
@@ -235,11 +257,10 @@ describe("runReset: B (auditoría pendiente) y C (sesiones no invalidadas)", () 
       h.calls.push("invalidateSessions");
       throw new Error("fallo permanente");
     };
-    const message = await rejection(runReset(h.deps, EMAIL));
+    const message = await rejection(runReset(h.deps, ARGS));
     expect(message).toContain("CONTRASEÑA CAMBIADA");
     expect(message).toContain("NO se han invalidado");
     expect(finalStatus(h)).toBe("fallo_invalidacion");
-    // No se afirma ninguna comprobación a cero que no ocurrió.
     expect(finalPatch(h)).not.toHaveProperty("sessionsAbsentAfterCheck");
     expect(finalPatch(h)).toMatchObject({ sessionsRemaining: 4 });
     expect(h.calls.filter((c) => c === "invalidateSessions")).toHaveLength(
@@ -259,7 +280,7 @@ describe("runReset: B (auditoría pendiente) y C (sesiones no invalidadas)", () 
       }
       throw new Error("consulta caída");
     };
-    const message = await rejection(runReset(h.deps, EMAIL));
+    const message = await rejection(runReset(h.deps, ARGS));
     expect(message).toContain("NO se han invalidado");
     expect(finalStatus(h)).toBe("fallo_invalidacion");
     expect(finalPatch(h)).not.toHaveProperty("sessionsAbsentAfterCheck");
@@ -275,7 +296,7 @@ describe("runReset: D (cambio no confirmado) — nunca éxito, nunca «seguro»"
       h.state.passwordChanged = true; // el commit ocurrió…
       throw new Error("error de transporte"); // …pero el llamador solo ve el error
     };
-    const message = await rejection(runReset(h.deps, EMAIL));
+    const message = await rejection(runReset(h.deps, ARGS));
     expect(h.calls).toContain("invalidateSessions");
     expect(h.state.sessions).toBe(0);
     expect(finalStatus(h)).toBe("cambio_no_confirmado");
@@ -284,8 +305,7 @@ describe("runReset: D (cambio no confirmado) — nunca éxito, nunca «seguro»"
     expect(message).toContain("puede seguir siendo válida");
     expect(message).toContain("REINTENTA AHORA");
     expect(message).toContain("NO retires RESET_PASSWORD");
-    // El estado `fallo_cambio` ya no existe: nunca se escribe.
-    expect(h.audit[0].patches.map((p) => p.status as string)).not.toContain("fallo_cambio");
+    expect(h.patches.map((p) => p.status as string)).not.toContain("fallo_cambio");
     expect(h.calls).not.toContain("updateAudit:contrasena_cambiada");
     expect(h.calls).not.toContain("superseder");
   });
@@ -293,15 +313,12 @@ describe("runReset: D (cambio no confirmado) — nunca éxito, nunca «seguro»"
   test("modifyPassword lanza SIN aplicar el cambio: mismo flujo, y un inicio con la contraseña antigua tras la verificación no se trata como seguro", async () => {
     const h = harness();
     h.deps.modifyPassword = failing("fallo antes del commit");
-    const message = await rejection(runReset(h.deps, EMAIL));
+    const message = await rejection(runReset(h.deps, ARGS));
     expect(h.state.passwordChanged).toBe(false);
     expect(h.state.sessions).toBe(0);
-    // La contraseña anterior sigue valiendo: se abre una sesión nueva DESPUÉS de la
-    // verificación. Nadie la considera legítima ni la detecta: el resultado ya fue D.
-    h.state.sessions = 1;
+    h.state.sessions = 1; // la contraseña anterior sigue valiendo: sesión nueva posterior
     expect(finalStatus(h)).toBe("cambio_no_confirmado");
     expect(message).toContain("NO es un estado seguro");
-    expect(message).toContain("puede seguir siendo válida");
     expect(message).toContain("pueden abrirse sesiones nuevas con ella");
     expect(h.calls).not.toContain("updateAudit:completado");
   });
@@ -310,7 +327,7 @@ describe("runReset: D (cambio no confirmado) — nunca éxito, nunca «seguro»"
     const h = harness();
     h.deps.modifyPassword = failing();
     h.deps.invalidateSessions = failing("fallo permanente");
-    const message = await rejection(runReset(h.deps, EMAIL));
+    const message = await rejection(runReset(h.deps, ARGS));
     expect(message).toContain("CRÍTICO");
     expect(message).toContain("NO invalidados");
     expect(message).toContain("REINTENTA AHORA");
@@ -319,18 +336,19 @@ describe("runReset: D (cambio no confirmado) — nunca éxito, nunca «seguro»"
     expect(finalPatch(h)).toMatchObject({ sessionsRemaining: 4 });
   });
 
-  test("el mensaje de error no contiene la contraseña", async () => {
-    const h = harness({ modifyPassword: failing(`clave ${PASSWORD} inválida`) });
-    const message = await rejection(runReset(h.deps, EMAIL));
+  test("el mensaje de error no contiene la contraseña ni el email", async () => {
+    const h = harness({ modifyPassword: failing(`clave ${PASSWORD} de ${EMAIL} inválida`) });
+    const message = await rejection(runReset(h.deps, ARGS));
     expect(message).not.toContain(PASSWORD);
-    expect(JSON.stringify([h.logs, h.audit])).not.toContain(PASSWORD);
+    expect(message).not.toContain(EMAIL);
+    expect(JSON.stringify([h.logs, h.patches])).not.toContain(PASSWORD);
   });
 });
 
 describe("runReset: supersesión de registros previos", () => {
   test("si superseder falla tras un A, el reset no se degrada y se avisa", async () => {
     const h = harness({ superseder: failing("fallo") });
-    const result = await runReset(h.deps, EMAIL);
+    const result = await runReset(h.deps, ARGS);
     expect(result).toEqual({ ok: true, requestId: "req-1", historialPrevioPendiente: true });
     expect(finalStatus(h)).toBe("completado");
   });
@@ -342,8 +360,122 @@ describe("runReset: supersesión de registros previos", () => {
       () => harness({ sessionState: failing() }),
     ]) {
       const h = make();
-      await rejection(runReset(h.deps, EMAIL));
+      await rejection(runReset(h.deps, ARGS));
       expect(h.calls).not.toContain("superseder");
+    }
+  });
+});
+
+describe("ejecución viva: el estado de la función programada decide el bloqueo", () => {
+  const T0 = 1_000_000;
+
+  test("pending e inProgress bloquean; success, failed y canceled liberan AL INSTANTE", () => {
+    expect(ejecucionViva("pending", T0, T0 + 1000)).toBe(true);
+    expect(ejecucionViva("inProgress", T0, T0 + 1000)).toBe(true);
+    for (const estado of ["success", "failed", "canceled"] as const) {
+      expect(ejecucionViva(estado, T0, T0 + 1000)).toBe(false);
+    }
+  });
+
+  test("fila purgada (null): se trata como viva solo mientras sea reciente", () => {
+    expect(ejecucionViva(null, T0, T0 + 60_000)).toBe(true);
+    expect(ejecucionViva(null, T0, T0 + LEASE_MS)).toBe(false);
+  });
+
+  test("red de seguridad: pending/inProgress más antiguos que LEASE_MS ya no pueden estar vivos; límite exacto", () => {
+    expect(ejecucionViva("inProgress", T0, T0 + LEASE_MS - 1)).toBe(true);
+    expect(ejecucionViva("inProgress", T0, T0 + LEASE_MS)).toBe(false);
+    expect(ejecucionViva("pending", T0, T0 + LEASE_MS + 1)).toBe(false);
+  });
+
+  test("LEASE_MS es al menos 30 min del runtime Convex + margen (no bajarlo sin ver el motivo)", () => {
+    expect(LEASE_MS).toBeGreaterThanOrEqual((30 + 5) * 60 * 1000);
+  });
+
+  test("registroBloquea: un terminal nunca bloquea, aunque su función siga pending", () => {
+    for (const status of ["completado", "fallo_preparacion", "cambio_no_confirmado", "fallo_invalidacion", "inconcluso_supersedido"]) {
+      expect(registroBloquea({ status, startedAt: T0 }, "inProgress", T0 + 1)).toBe(false);
+    }
+    for (const status of ["iniciado", "contrasena_cambiada"]) {
+      expect(registroBloquea({ status, startedAt: T0 }, "inProgress", T0 + 1)).toBe(true);
+      // Registro no cerrado pero ejecución terminada: NO bloquea (sin espera de 35 min).
+      expect(registroBloquea({ status, startedAt: T0 }, "success", T0 + 1)).toBe(false);
+      expect(registroBloquea({ status, startedAt: T0 }, "failed", T0 + 1)).toBe(false);
+    }
+  });
+});
+
+describe("clasificarResultado: solo mensajes canónicos desde el estado auditado", () => {
+  const reg = (estado: string, extra: object = {}) => ({ estado, ...extra });
+
+  test("pending e inProgress → esperar", () => {
+    expect(clasificarResultado("r", "pending", reg("iniciado"), 0)).toEqual({ kind: "esperar" });
+    expect(clasificarResultado("r", "inProgress", reg("iniciado"), 0)).toEqual({ kind: "esperar" });
+  });
+
+  test("success + completado → A (con historialPrevioPendiente solo si quedan previos)", () => {
+    expect(clasificarResultado("r", "success", reg("completado"), 0)).toEqual({
+      kind: "ok",
+      result: { ok: true, requestId: "r" },
+    });
+    expect(clasificarResultado("r", "success", reg("completado"), 2)).toEqual({
+      kind: "ok",
+      result: { ok: true, requestId: "r", historialPrevioPendiente: true },
+    });
+  });
+
+  test("success + registro sin cerrar → B", () => {
+    for (const estado of ["iniciado", "contrasena_cambiada"]) {
+      expect(clasificarResultado("r", "success", reg(estado), 0)).toEqual({
+        kind: "ok",
+        result: { ok: true, requestId: "r", auditoriaPendiente: true },
+      });
+    }
+  });
+
+  test("failed + fallo_preparacion / fallo_invalidacion → mensajes canónicos", () => {
+    const prep = clasificarResultado("r", "failed", reg("fallo_preparacion"), 0);
+    expect(prep).toMatchObject({ kind: "error" });
+    expect((prep as { message: string }).message).toContain("No se intentó cambiar la contraseña");
+    const c = clasificarResultado("r", "failed", reg("fallo_invalidacion"), 0);
+    expect((c as { message: string }).message).toContain("CONTRASEÑA CAMBIADA");
+  });
+
+  test("failed + cambio_no_confirmado: D1 si verificado a 0, D2 en otro caso", () => {
+    const d1 = clasificarResultado(
+      "r",
+      "failed",
+      reg("cambio_no_confirmado", { sessionsRemaining: 0, sessionsAbsentAfterCheck: 2 }),
+      0,
+    ) as { message: string };
+    expect(d1.message).toContain("NO CONFIRMADO");
+    expect(d1.message).toContain("NO es un estado seguro");
+    const d2 = clasificarResultado(
+      "r",
+      "failed",
+      reg("cambio_no_confirmado", { sessionsRemaining: 3 }),
+      0,
+    ) as { message: string };
+    expect(d2.message).toContain("CRÍTICO");
+    const d2b = clasificarResultado("r", "failed", reg("cambio_no_confirmado"), 0) as { message: string };
+    expect(d2b.message).toContain("CRÍTICO");
+  });
+
+  test("no clasificable (registro sin cerrar o ausente, success inesperado, fila purgada) → genérico conservador con requestId, tratado como D2", () => {
+    for (const [ejecucion, registro] of [
+      ["failed", reg("iniciado")],
+      ["canceled", reg("contrasena_cambiada")],
+      ["failed", null],
+      ["desconocida", null],
+      ["success", reg("fallo_invalidacion")],
+      ["failed", reg("completado")],
+    ] as const) {
+      const c = clasificarResultado("req-9", ejecucion, registro, 0) as { kind: string; message: string };
+      expect(c.kind).toBe("error");
+      expect(c.message).toContain("req-9");
+      expect(c.message).toContain("Trátalo como D2");
+      expect(c.message).toContain("REINTENTA AHORA");
+      expect(c.message).toContain("NO retires RESET_PASSWORD");
     }
   });
 });
