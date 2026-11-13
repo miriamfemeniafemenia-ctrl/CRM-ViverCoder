@@ -1,5 +1,6 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
+import { addressValidator } from "./lib/addressFields";
 import { v } from "convex/values";
 
 /**
@@ -88,23 +89,26 @@ export default defineSchema({
     birthDate: v.optional(v.string()), // ISO date
     sex: v.optional(v.string()),
     language: v.optional(v.union(v.literal("castellano"), v.literal("valenciano"))),
-    address: v.optional(
-      v.object({
-        street: v.string(),
-        number: v.string(),
-        floorDoor: v.optional(v.string()),
-        postalCode: v.string(),
-        city: v.string(),
-        province: v.string(),
-      }),
-    ),
+    // Contrato único en lib/addressFields.ts: los 6 subcampos opcionales.
+    address: v.optional(addressValidator),
     referredBy: v.optional(v.string()),
     assignedAgentId: v.optional(v.id("users")),
     createdAt: v.number(), // Date.now()
+    // Versión del cliente para el control de ediciones simultáneas (ARC-11):
+    // toda mutation que modifique campos editables debe actualizarlo con
+    // max(Date.now(), versión anterior + 1). Ausente en clientes anteriores a
+    // ARC-49: su versión es `createdAt`. Las escrituras directas (panel,
+    // import, scripts) siguen el procedimiento del README.
+    updatedAt: v.optional(v.number()),
   })
     .index("by_saleStatus", ["saleStatus"])
     .index("by_assignedAgent", ["assignedAgentId"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    // Sugerencias de población por código postal (ARC-66).
+    .index("by_postalCode", ["address.postalCode"])
+    // Índice para la comprobación de unicidad del DNI/NIE que hacen las
+    // mutations (ARC-49). Un índice de Convex no impone unicidad por sí solo.
+    .index("by_dni", ["dni"]),
 
   // D2 — Contacto: one entry per call/WhatsApp/email/etc. Feeds the client's history.
   contacts: defineTable({
