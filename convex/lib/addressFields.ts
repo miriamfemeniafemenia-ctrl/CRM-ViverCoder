@@ -5,8 +5,9 @@ import { v } from "convex/values";
 // en todas las capas a la vez.
 //
 // Los 6 subcampos son opcionales a propósito: se puede guardar una dirección
-// parcial (por ejemplo solo código postal y población). Una dirección con todos
-// los subcampos vacíos no se guarda (`address` queda `undefined`).
+// parcial (por ejemplo solo código postal y población). Este validador acepta
+// también `address: {}`: no guardar una dirección vacía es responsabilidad de
+// la normalización de entrada de las mutations, no del esquema.
 //
 // Solo importa `convex/values` para que el schema pueda usarlo sin crear una
 // dependencia circular con `_generated`.

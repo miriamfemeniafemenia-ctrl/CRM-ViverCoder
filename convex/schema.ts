@@ -106,7 +106,8 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"])
     // Sugerencias de población por código postal (ARC-66).
     .index("by_postalCode", ["address.postalCode"])
-    // DNI/NIE único (ARC-49), guardado ya normalizado.
+    // Índice para la comprobación de unicidad del DNI/NIE que hacen las
+    // mutations (ARC-49). Un índice de Convex no impone unicidad por sí solo.
     .index("by_dni", ["dni"]),
 
   // D2 — Contacto: one entry per call/WhatsApp/email/etc. Feeds the client's history.
