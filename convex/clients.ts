@@ -1,14 +1,23 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { clientChannelValidator, insertClient } from "./lib/clientInput";
+import {
+  assertClientReferences,
+  CLIENT_ERRORS,
+  clientFields,
+  insertClient,
+  normalizeClientFields,
+  normalizePostalCode,
+} from "./lib/clientInput";
+import { getTeamUser, requireTeamUser } from "./lib/team";
 
-// D1 — Cliente. Alta básica (ARC-10/P4) y listado con buscador (ARC-9/P2).
-// Los campos ampliados de D1 (DNI, dirección, prioridad, agente asignado...)
-// quedan fuera de este alcance — ver ARC-48/ARC-31/ARC-49.
-// Las reglas del alta viven en lib/clientInput.ts (compartidas con el alta
-// inline de "Anotar interacción", ARC-72).
+// D1 — Cliente. Alta (ARC-10/P4, ampliada en ARC-49), edición con control de
+// ediciones simultáneas (ARC-11), sugerencias de población por código postal
+// (ARC-66) y listado con buscador (ARC-9/P2). La prioridad y el estado de venta
+// no se editan aquí (ARC-32/ARC-33, P3).
+// Las reglas de los campos viven en lib/clientInput.ts (compartidas con el alta
+// inline de "Anotar interacción", ARC-72). Acceso: cartera compartida del
+// equipo, guards de lib/team.ts como primera sentencia de cada handler.
 
 const saleStatusValidator = v.union(
   v.literal("interesado"),
@@ -30,27 +39,94 @@ const PICKER_MIN_TERM = 2;
 const PICKER_MAX_RESULTS = 10;
 const PHONE_SEPARATORS_RE = /[\s\-.()]/g;
 
+// Los argumentos amplían los del alta original de forma retrocompatible: los
+// campos que ya existían mantienen nombre, tipo y obligatoriedad.
 export const create = mutation({
-  args: {
-    name: v.string(),
-    phone: v.optional(v.string()),
-    email: v.optional(v.string()),
-    channel: clientChannelValidator,
-  },
+  args: clientFields,
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("No autenticado");
-    }
+    await requireTeamUser(ctx);
     return await insertClient(ctx, args);
+  },
+});
+
+// Edición de cliente (P4 editar, ARC-11). Sustituye TODOS los campos
+// editables: el que llega vacío se borra. No toca `saleStatus`, `priority` ni
+// `createdAt`.
+//
+// Control optimista: `expectedVersion` es la versión con la que se abrió el
+// formulario (`updatedAt ?? createdAt`). Si ya no coincide, otra persona guardó
+// antes y se rechaza en vez de pisar sus cambios. La comprobación y el patch van
+// en la misma mutation, así que son atómicos. La versión siempre sube
+// (max(ahora, anterior + 1)). Cubre las mutations de la aplicación; las
+// escrituras directas siguen el procedimiento del README.
+export const update = mutation({
+  args: { id: v.id("clients"), expectedVersion: v.number(), ...clientFields },
+  handler: async (ctx, args) => {
+    await requireTeamUser(ctx);
+    const { id, expectedVersion, ...input } = args;
+    const client = await ctx.db.get(id);
+    if (!client) {
+      throw new ConvexError(CLIENT_ERRORS.notFound);
+    }
+    const currentVersion = client.updatedAt ?? client.createdAt;
+    if (expectedVersion !== currentVersion) {
+      throw new ConvexError(CLIENT_ERRORS.editConflict);
+    }
+    const fields = normalizeClientFields(input);
+    await assertClientReferences(ctx, fields, id);
+    // `patch` con `undefined` borra el campo: así se vacían los que llegan vacíos.
+    await ctx.db.patch(id, {
+      ...fields,
+      updatedAt: Math.max(Date.now(), currentVersion + 1),
+    });
+  },
+});
+
+const CITIES_SCAN_LIMIT = 50;
+const CITIES_MAX_RESULTS = 10;
+
+// Sugerencias de población para un código postal (ARC-66, «aprender de la
+// cartera»): las poblaciones que ya se usaron con ese código en otros
+// clientes. Devuelve SOLO nombres de población distintos (nunca clientes) y el
+// código normalizado al que corresponden, para que la interfaz descarte
+// respuestas de un código anterior. Es una sugerencia, no una lista
+// exhaustiva: recorre como mucho CITIES_SCAN_LIMIT clientes.
+export const citiesForPostalCode = query({
+  args: { postalCode: v.string() },
+  returns: v.object({
+    postalCode: v.union(v.string(), v.null()),
+    cities: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
+      return { postalCode: null, cities: [] };
+    }
+    const postalCode = normalizePostalCode(args.postalCode);
+    if (postalCode === null) {
+      return { postalCode: null, cities: [] };
+    }
+    const clients = await ctx.db
+      .query("clients")
+      .withIndex("by_postalCode", (q) => q.eq("address.postalCode", postalCode))
+      .take(CITIES_SCAN_LIMIT);
+    const cities = new Set<string>();
+    for (const c of clients) {
+      const city = c.address?.city?.trim();
+      if (city) cities.add(city);
+    }
+    return {
+      postalCode,
+      cities: [...cities].sort((a, b) => a.localeCompare(b, "es")).slice(0, CITIES_MAX_RESULTS),
+    };
   },
 });
 
 export const list = query({
   args: { search: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
       return [];
     }
     const all = await ctx.db
@@ -75,8 +151,8 @@ export const list = query({
 export const get = query({
   args: { id: v.id("clients") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
       return null;
     }
     return await ctx.db.get(args.id);
@@ -99,8 +175,8 @@ export const searchForPicker = query({
   args: { term: v.string() },
   returns: v.array(pickerClientValidator),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
       return [];
     }
     const term = args.term.trim().toLowerCase();
@@ -139,8 +215,8 @@ export const lookup = query({
   args: { id: v.string() },
   returns: v.union(pickerClientValidator, v.null()),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
       return null;
     }
     const id = ctx.db.normalizeId("clients", args.id);

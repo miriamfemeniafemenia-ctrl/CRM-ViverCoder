@@ -1,8 +1,8 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { mutation, query, QueryCtx } from "./_generated/server";
-import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
+import { getTeamUser, requireTeamUser } from "./lib/team";
+import { isValidISODate, NOTE_MAX_LENGTH, todayISODateMadrid } from "./lib/validation";
 
 // D3 — Recordatorio. Alta desde la sub-pantalla "Nuevo recordatorio" (ARC-15)
 // con asignación a un usuario del equipo (ARC-60), y edición/borrado desde P3
@@ -15,9 +15,10 @@ import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 //   `clients.list` aplican control de acceso por usuario (PRD de ARC-16) y
 //   este archivo mantiene la misma invariante. Se sostiene porque
 //   convex/auth.ts bloquea el registro (`signUp`) y convex/seed.ts crea solo
-//   las 3 cuentas: estar autenticado equivale a ser de la oficina. Si se abre
-//   el registro o se segmenta por cliente/equipo, la autorización tiene que
-//   pasar a `get`, `update` y `remove`.
+//   las 3 cuentas. Cada handler empieza con el guard de convex/lib/team.ts
+//   (`getTeamUser`/`requireTeamUser`: usuario existente con rol del equipo).
+//   Si se segmenta por cliente/equipo, la autorización tiene que pasar a
+//   `get`, `update` y `remove`.
 // - `update` tiene control optimista sin tocar el schema: el cliente manda los
 //   valores con los que abrió el formulario (`expectedDate`, `expectedNote`,
 //   `expectedAssignedToId`) y el servidor rechaza el guardado si alguno ya no
@@ -26,25 +27,6 @@ import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 //   por valor, no control de versión: un cambio A→B→A entre la carga y el
 //   guardado no se detecta (el resultado coincide con el original).
 // - `remove` es idempotente: borrar algo que ya no existe es éxito.
-
-// Duplicada (con la misma lógica) en src/lib/reminders.ts: Convex solo
-// empaqueta `convex/`, Next.js solo empaqueta `src/`, no comparten build.
-// Si se toca una, tocar la otra.
-function todayISODateMadrid() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Madrid",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const year = parts.find((p) => p.type === "year")?.value;
-  const month = parts.find((p) => p.type === "month")?.value;
-  const day = parts.find((p) => p.type === "day")?.value;
-  if (!year || !month || !day) {
-    throw new Error("No se pudo calcular la fecha de hoy (Europe/Madrid)");
-  }
-  return `${year}-${month}-${day}`;
-}
 
 // Error con texto para el usuario: el cliente solo muestra los que llevan
 // `userMessage` (src/lib/reminders.ts); cualquier otro error, o un ConvexError
@@ -89,10 +71,7 @@ export const create = mutation({
     assignedToId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("No autenticado");
-    }
+    const user = await requireTeamUser(ctx);
     const note = validateNoteAndDate(args.note, args.date);
     assertNotPastDate(args.date);
     const client = await ctx.db.get(args.clientId);
@@ -105,7 +84,7 @@ export const create = mutation({
       date: args.date,
       note,
       status: "pendiente",
-      createdById: userId,
+      createdById: user._id,
       assignedToId: args.assignedToId,
     });
   },
@@ -117,8 +96,8 @@ export const create = mutation({
 export const get = query({
   args: { id: v.string() },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
       return null;
     }
     const id = ctx.db.normalizeId("reminders", args.id);
@@ -141,10 +120,7 @@ export const update = mutation({
     assignedToId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("No autenticado");
-    }
+    await requireTeamUser(ctx);
     const note = validateNoteAndDate(args.note, args.date);
     const reminder = await ctx.db.get(args.id);
     if (!reminder) {
@@ -177,10 +153,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("reminders") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("No autenticado");
-    }
+    await requireTeamUser(ctx);
     const reminder = await ctx.db.get(args.id);
     if (!reminder) {
       return;
@@ -197,8 +170,9 @@ export const remove = mutation({
 // P1 — recordatorios pendientes de quien está conectado, con el nombre del
 // cliente. Sin filtrar por fecha (vencidos, de hoy y futuros): el corte por
 // "hoy" es ARC-63, la pestaña "Próximas" es ARC-62, ninguno de los dos entra
-// en este ticket. userId siempre sale de la sesión (getAuthUserId), nunca de
+// en este ticket. userId siempre sale de la sesión (getTeamUser), nunca de
 // un argumento — no hay forma de pedir la lista de otra persona.
+// Guard: `getTeamUser` (convex/lib/team.ts).
 // Volumen esperado: unas decenas de pendientes por usuario (3 cuentas fijas
 // en total, sin alta pública — ver convex/auth.ts). Si crece, sustituir
 // by_assignedTo_status por un índice ["assignedToId", "status", "date"] y
@@ -206,8 +180,9 @@ export const remove = mutation({
 export const listPendingByAssignee = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return [];
+    const user = await getTeamUser(ctx);
+    if (user === null) return [];
+    const userId = user._id;
     const reminders = await ctx.db
       .query("reminders")
       .withIndex("by_assignedTo_status", (q) =>
@@ -245,9 +220,10 @@ export const countDueByAssignee = query({
   args: { today: v.string() },
   returns: v.number(),
   handler: async (ctx, args) => {
-    // Sin sesión se devuelve antes de tocar la base de datos.
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return 0;
+    // Sin sesión del equipo se devuelve antes de tocar la base de datos.
+    const user = await getTeamUser(ctx);
+    if (user === null) return 0;
+    const userId = user._id;
     if (!isValidISODate(args.today)) throw userError("La fecha no es válida");
     const pending = await ctx.db
       .query("reminders")
@@ -262,8 +238,8 @@ export const countDueByAssignee = query({
 export const listPendingByClient = query({
   args: { clientId: v.id("clients") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
       return [];
     }
     const reminders = await ctx.db

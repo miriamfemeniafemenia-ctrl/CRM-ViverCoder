@@ -1,7 +1,7 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { insertClient, newClientValidator } from "./lib/clientInput";
+import { requireTeamUser } from "./lib/team";
 import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 
 // D2 — Contacto. "Anotar interacción" (ARC-72): registrar qué pasó en una
@@ -20,8 +20,8 @@ import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 // - Si el cliente no existe se da de alta en la misma mutation (`newClient`):
 //   Convex revierte la transacción entera si algo falla después, así que no
 //   queda un cliente huérfano.
-// - Visibilidad total entre las 3 cuentas fijas, como en convex/reminders.ts:
-//   estar autenticado equivale a ser de la oficina.
+// - Visibilidad total entre las 3 cuentas fijas (cartera compartida): guard
+//   `requireTeamUser` de convex/lib/team.ts.
 
 // Error con texto para el usuario (ver `userError` en convex/reminders.ts).
 function userError(userMessage: string) {
@@ -47,10 +47,7 @@ export const create = mutation({
   },
   returns: v.object({ contactId: v.id("contacts"), clientId: v.id("clients") }),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("No autenticado");
-    }
+    const user = await requireTeamUser(ctx);
     const note = args.note.trim();
     if (!note) {
       throw userError("La nota es obligatoria");
@@ -81,7 +78,7 @@ export const create = mutation({
       date: args.date,
       note,
       performedById: args.performedById,
-      createdById: userId,
+      createdById: user._id,
       createdAt: Date.now(),
     });
     return { contactId, clientId };

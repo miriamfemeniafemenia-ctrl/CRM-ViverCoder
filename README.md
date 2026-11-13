@@ -292,12 +292,53 @@ cualquier cambio posterior.
 
 **Regla de seguridad para todo lo que se construya a partir de aquí
 (ARC-8 y P1–P6)**: proteger rutas con `src/proxy.ts` protege la
-**navegación**, no sustituye la autorización dentro de Convex. Ninguna
-query/mutation pública sobre `clients`/`contacts`/`reminders`/`claims`/
-`policies` debe publicarse sin validar `getAuthUserId(ctx)` al principio
-(devolviendo `null`/lanzando si no hay sesión), más cualquier chequeo de rol
-u ownership que aplique. `convex/users.ts` (`current`) ya sigue este patrón
-— úsalo como referencia.
+**navegación**, no sustituye la autorización dentro de Convex. Ver «Acceso a
+datos» justo debajo.
+
+### Acceso a datos (ARC-49)
+
+**Política: una sola cartera compartida.** Cualquier usuario del equipo (rol
+`owner` o `agent`: Miriam, Mónica y Antonio) puede ver y editar cualquier
+cliente, contacto o recordatorio y asignarlo a cualquier otro usuario del
+equipo. No hay segmentación por agente ni por cartera; si algún día la hay, es
+un ticket propio que revisa todas las funciones del manifiesto.
+
+- **Guards** (`convex/lib/team.ts`), siempre como **primera sentencia** del
+  handler:
+  - queries: `const user = await getTeamUser(ctx);` y justo después
+    `if (user === null) return <vacío>;` (sin sesión devuelven `[]`/`null`/`0`
+    sin leer datos);
+  - mutations: `await requireTeamUser(ctx);` (lanza «No autenticado»).
+- **Manifiesto** `convex/access-manifest.json`: TODAS las funciones públicas y
+  rutas HTTP con su guard. Toda función pública nueva se añade ahí y a los
+  casos de `convex/lib/team.test.ts` (la prueba falla si falta).
+- **Comprobación** `scripts/check-access-manifest.mjs`:
+  - `--source`: el código de `convex/` frente al manifiesto, con el AST de
+    TypeScript (el guard tiene que ser la primera sentencia).
+  - `--spec <json de npx convex function-spec>`: lo desplegado frente al
+    manifiesto. Compárese **siempre con el manifiesto del SHA desplegado en
+    ese entorno** (`--manifest-ref <SHA>`), nunca con el de una versión que aún
+    no está desplegada ahí.
+
+### Cambios directos en datos de clientes (ARC-11)
+
+El control de ediciones simultáneas (`clients.updatedAt`, comprobado por
+`clients.update`) cubre **solo las mutations de la aplicación**
+(`clients.create`, `clients.update` y el alta rápida de `contacts.create`). No
+puede cubrir escrituras que no pasan por el código: el panel de datos de
+Convex, `npx convex import` o scripts.
+
+1. Esas vías están **prohibidas por norma** para modificar clientes, salvo
+   emergencia autorizada por Miriam.
+2. En una emergencia: primero una copia de seguridad, y en **la misma edición**
+   `updatedAt = max(instante actual en milisegundos, updatedAt anterior + 1)`
+   (si no tenía `updatedAt`, el anterior es `createdAt`). Así la versión nunca
+   baja y cualquier formulario abierto recibe el aviso de conflicto en vez de
+   pisar el cambio.
+3. Se anota en Linear: fecha, id del cliente, qué se cambió (sin datos
+   personales), quién lo autorizó y la copia usada.
+4. Las importaciones masivas solo con un ticket propio que defina cómo fijan
+   `updatedAt`.
 
 **Para ARC-8 (shell de navegación)**: `useAuthActions().signOut()` (de
 `@convex-dev/auth/react`) ya está disponible — reutilízalo en el botón de
