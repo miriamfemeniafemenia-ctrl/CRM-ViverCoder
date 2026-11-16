@@ -8,12 +8,14 @@
 // La lista de casos se compara con el manifiesto para que una función pública
 // nueva no pueda quedar sin prueba de acceso.
 import { convexTest } from "convex-test";
+import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import manifest from "../access-manifest.json";
 import { api } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { modules } from "../test.setup";
+import { NOT_AUTHENTICATED } from "./team";
 
 async function setup() {
   const t = convexTest(schema, modules);
@@ -162,7 +164,14 @@ describe("política de acceso: sesión ajena al equipo", () => {
       if (c.kind === "query") {
         expect(await c.run(s)).toEqual(c.expected);
       } else {
-        await expect(c.run(s)).rejects.toThrow("No autenticado");
+        // Contrato con el cliente: ConvexError con data «No autenticado» (un
+        // Error normal se redactaría en producción como «Server Error»).
+        const err = await c.run(s).then(
+          () => null,
+          (e: unknown) => e,
+        );
+        expect(err).toBeInstanceOf(ConvexError);
+        expect((err as ConvexError<string>).data).toBe(NOT_AUTHENTICATED);
       }
       expect(await snapshot(s)).toEqual(before);
     });

@@ -39,10 +39,15 @@ export async function getTeamUser(ctx: QueryCtx): Promise<Doc<"users"> | null> {
   return isTeamUser(user) ? user : null;
 }
 
+// Contrato con el cliente: `ConvexError` con `data === NOT_AUTHENTICATED`. Un
+// `Error` normal se redacta en producción como «Server Error» y el cliente no
+// podría reconocerlo; `ConvexError` llega con su `data` intacto.
+export const NOT_AUTHENTICATED = "No autenticado";
+
 export async function requireTeamUser(ctx: QueryCtx): Promise<Doc<"users">> {
   const user = await getTeamUser(ctx);
   if (user === null) {
-    throw new Error("No autenticado");
+    throw new ConvexError(NOT_AUTHENTICATED);
   }
   return user;
 }

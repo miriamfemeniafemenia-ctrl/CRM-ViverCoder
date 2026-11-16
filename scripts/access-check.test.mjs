@@ -3,10 +3,12 @@
 // manifiesto tiene que FALLAR ante handlers inválidos (guard tras ctx.db, en
 // una rama, helper irrelevante, guard solo en un comentario…) y ante
 // diferencias entre el manifiesto y lo desplegado.
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { checkSourceAgainstManifest, checkSpecAgainstManifest } from "./access-check.mjs";
+import { collectConvexSources } from "./convex-sources.mjs";
 
 const manifest = (functions, httpRoutes = {}) => ({ version: 1, functions, httpRoutes });
 const fn = (identifier, functionType = "Query", kind = "public") => ({
@@ -162,11 +164,31 @@ describe("B) código frente a manifiesto (AST)", () => {
     expect(errors).toEqual(["m.js:nueva: función pública (mutation) en el código que no está en el manifiesto"]);
   });
 
-  test("el código real de convex/ cumple el manifiesto real", () => {
+  test("módulos públicos en subcarpetas de convex/ se revisan igual (sub/mod.js:f)", () => {
+    const root = mkdtempSync(join(tmpdir(), "convex-src-"));
+    try {
+      mkdirSync(join(root, "sub"));
+      mkdirSync(join(root, "_generated"));
+      writeFileSync(join(root, "top.ts"), "export const a = 1;");
+      writeFileSync(join(root, "schema.ts"), "export default 1;");
+      writeFileSync(join(root, "sub", "mod.ts"), "export const f = mutation({ handler: async (ctx) => { return ctx.db; } });");
+      writeFileSync(join(root, "sub", "mod.test.ts"), "export const t = query({});");
+      writeFileSync(join(root, "_generated", "api.ts"), "export const g = query({});");
+      const files = collectConvexSources(root);
+      expect(files.map((f) => f.module).sort()).toEqual(["sub/mod", "top"]);
+      // Sin declarar: se detecta como función pública fuera del manifiesto.
+      expect(checkSourceAgainstManifest(files, manifest({}))).toEqual([
+        "sub/mod.js:f: función pública (mutation) en el código que no está en el manifiesto",
+      ]);
+      // Declarada con guard pero sin cumplirlo: falla igual que en la raíz.
+      expect(checkSourceAgainstManifest(files, manifest({ "sub/mod.js:f": "requireTeamUser" }))).toHaveLength(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("el código real de convex/ (con subcarpetas) cumple el manifiesto real", () => {
     const real = JSON.parse(readFileSync("convex/access-manifest.json", "utf8"));
-    const files = readdirSync("convex")
-      .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.endsWith(".d.ts") && f !== "schema.ts")
-      .map((f) => ({ module: f.replace(/\.ts$/, ""), text: readFileSync(join("convex", f), "utf8") }));
-    expect(checkSourceAgainstManifest(files, real)).toEqual([]);
+    expect(checkSourceAgainstManifest(collectConvexSources("convex"), real)).toEqual([]);
   });
 });

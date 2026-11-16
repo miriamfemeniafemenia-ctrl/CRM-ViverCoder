@@ -50,8 +50,9 @@ export type ContactFormValues = {
 };
 
 // Errores de negocio: `ConvexError({ userMessage })` (contacts.create) o
-// `ConvexError("texto")` (validaciones del alta de cliente, lib/clientInput.ts).
-// Cualquier otro (red, "No autenticado"...) cae en el mensaje genérico.
+// `ConvexError("texto")` (validaciones del alta de cliente, lib/clientInput.ts,
+// y «No autenticado» de convex/lib/team.ts, que se muestra tal cual). Cualquier
+// otro (red, fallos inesperados) cae en el mensaje genérico.
 function contactErrorMessage(err: unknown, fallback: string) {
   const data: unknown = err instanceof ConvexError ? err.data : undefined;
   if (typeof data === "string") return data;

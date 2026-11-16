@@ -1,5 +1,5 @@
 {
-  "_comment": "Manifiesto de acceso (ARC-49). Lista TODAS las funciones públicas y rutas HTTP del despliegue con su guard. Lo comprueba scripts/check-access-manifest.mjs contra `npx convex function-spec` (comprobación A) y contra el código con AST (comprobación B). Política: cartera compartida del equipo, ver convex/lib/team.ts. Toda función pública nueva debe añadirse aquí con su guard, y a los casos de convex/lib/team.test.ts.",
+  "_comment": "Manifiesto de acceso (ARC-49). Lista TODAS las funciones públicas y rutas HTTP del despliegue con su guard. Lo comprueba scripts/check-access-manifest.mjs contra `npx convex function-spec` (comprobación A) y contra el código con AST (comprobación B). Política: cartera compartida del equipo, ver convex/lib/team.ts. Toda función pública nueva debe añadirse aquí con su guard, y a los casos de convex/lib/team.test.ts. De convex/auth.ts solo son públicas isAuthenticated, signIn y signOut: store es interna (function-spec la marca visibility internal), así que no figura; si pasara a pública, la comprobación A fallaría.",
   "version": 1,
   "functions": {
     "auth.js:isAuthenticated": "convex-auth",

@@ -12,9 +12,9 @@
 //
 // Sale con código 1 si hay cualquier error.
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { checkSourceAgainstManifest, checkSpecAgainstManifest } from "./access-check.mjs";
+import { collectConvexSources } from "./convex-sources.mjs";
 
 const args = process.argv.slice(2);
 const value = (flag) => {
@@ -58,9 +58,7 @@ if (specPath) {
 }
 
 if (source) {
-  const files = readdirSync("convex")
-    .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.endsWith(".d.ts") && f !== "schema.ts")
-    .map((f) => ({ module: f.replace(/\.ts$/, ""), text: readFileSync(join("convex", f), "utf8") }));
+  const files = collectConvexSources("convex");
   report(`B) código de convex/ frente al manifiesto (${files.length} archivos)`, checkSourceAgainstManifest(files, manifest));
 }
 
