@@ -2,7 +2,16 @@
 
 import { useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
-import { FormEvent, ReactNode, useEffect, useId, useReducer, useState } from "react";
+import {
+  cloneElement,
+  FormEvent,
+  ReactElement,
+  ReactNode,
+  useEffect,
+  useId,
+  useReducer,
+  useState,
+} from "react";
 import {
   addressReducer,
   AddressState,
@@ -26,13 +35,27 @@ const fieldClass =
   "border-border-default text-text-primary focus:border-primary-500 disabled:text-text-tertiary h-12 w-full rounded-md border px-3 outline-none disabled:bg-neutral-100";
 const selectClass = `${fieldClass} bg-surface-card`;
 
-function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
+// Un campo: `<label htmlFor>` + el control (recibe el `id`) + una ayuda
+// opcional FUERA de la etiqueta (puede llevar botones, que no pueden ir dentro
+// de un <label>).
+function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: ReactElement<{ id?: string }>;
+  hint?: ReactNode;
+}) {
+  const id = useId();
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-text-secondary text-sm font-medium">{label}</span>
-      {children}
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-text-secondary text-sm font-medium">
+        {label}
+      </label>
+      {cloneElement(children, { id })}
       {hint}
-    </label>
+    </div>
   );
 }
 
@@ -308,12 +331,12 @@ export function ClientForm({
             disabled={isSaving}
             className={fieldClass}
           />
-          <datalist id={citiesListId}>
-            {suggestedCities.map((city) => (
-              <option key={city} value={city} />
-            ))}
-          </datalist>
         </Field>
+        <datalist id={citiesListId}>
+          {suggestedCities.map((city) => (
+            <option key={city} value={city} />
+          ))}
+        </datalist>
         <Field
           label="Provincia"
           hint={

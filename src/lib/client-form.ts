@@ -279,6 +279,26 @@ export function clientVersion(client: Pick<Doc<"clients">, "updatedAt" | "create
   return client.updatedAt ?? client.createdAt;
 }
 
+// Cliente fijado en la pantalla de Editar, atado al id de la ruta: si la ruta
+// pasa a otro cliente sin recargar la página, lo fijado del anterior se
+// descarta y se espera al documento del nuevo id. Nunca se usa un documento
+// cuyo `_id` no sea el de la ruta (evita guardar datos de A sobre B).
+export type PinnedClient = { routeId: string; client: Doc<"clients"> } | null;
+
+export function pinnedForRoute(
+  pinned: PinnedClient,
+  routeId: string,
+  live: Doc<"clients"> | null | undefined,
+): PinnedClient {
+  if (pinned !== null && pinned.routeId === routeId && pinned.client._id === routeId) {
+    return pinned;
+  }
+  if (live && live._id === routeId) {
+    return { routeId, client: live };
+  }
+  return null;
+}
+
 const optional = (value: string) => value.trim() || undefined;
 
 // Datos que se envían a clients.create / clients.update. Lo vacío va como

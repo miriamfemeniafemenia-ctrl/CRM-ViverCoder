@@ -20,6 +20,7 @@ import {
   initialAddressState,
   KNOWN_SERVER_ERRORS,
   normalizePostalCode,
+  pinnedForRoute,
   PROVINCES,
   provinceFromPostalCode,
   provinceMismatch,
@@ -148,6 +149,33 @@ describe("cliente ↔ formulario ↔ datos enviados", () => {
   test("versión: updatedAt, o createdAt en clientes antiguos", () => {
     expect(clientVersion(fullClient)).toBe(200);
     expect(clientVersion({ createdAt: 100, updatedAt: undefined })).toBe(100);
+  });
+});
+
+describe("cliente fijado en Editar, atado al id de la ruta", () => {
+  const a = { ...fullClient, _id: "A" as Id<"clients">, name: "A" };
+  const b = { ...fullClient, _id: "B" as Id<"clients">, name: "B" };
+
+  test("fija el cliente de la ruta la primera vez y luego lo conserva aunque cambie en vivo", () => {
+    const first = pinnedForRoute(null, "A", a);
+    expect(first).toEqual({ routeId: "A", client: a });
+    const changedLive = { ...a, name: "A cambiado por otra persona", updatedAt: 999 };
+    expect(pinnedForRoute(first, "A", changedLive)).toBe(first);
+  });
+
+  test("navegar de A a B sin recargar: descarta A y espera al documento de B", () => {
+    const pinnedA = pinnedForRoute(null, "A", a);
+    // La consulta todavía devuelve A (o nada): no se fija nada para B.
+    expect(pinnedForRoute(pinnedA, "B", a)).toBeNull();
+    expect(pinnedForRoute(pinnedA, "B", undefined)).toBeNull();
+    expect(pinnedForRoute(pinnedA, "B", null)).toBeNull();
+    // Llega B: se fija B, nunca A.
+    expect(pinnedForRoute(null, "B", b)).toEqual({ routeId: "B", client: b });
+  });
+
+  test("sin documento todavía: nada fijado", () => {
+    expect(pinnedForRoute(null, "A", undefined)).toBeNull();
+    expect(pinnedForRoute(null, "A", null)).toBeNull();
   });
 });
 
