@@ -77,9 +77,18 @@ export default function Page({
     <div className="border-border-default bg-surface-card max-w-lg rounded-lg border p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-4">
         <h1 className="text-text-primary text-2xl font-semibold">{client.name}</h1>
-        <span className="rounded-pill bg-sale-interesado-bg text-sale-interesado-fg px-3 py-1 text-xs font-medium">
-          {SALE_STATUS_LABEL[client.saleStatus]}
-        </span>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="rounded-pill bg-sale-interesado-bg text-sale-interesado-fg px-3 py-1 text-xs font-medium">
+            {SALE_STATUS_LABEL[client.saleStatus]}
+          </span>
+          {/* P4 Editar (ARC-11): único punto de entrada a la edición. */}
+          <Link
+            href={`/clientes/${clientId}/editar`}
+            className="text-text-link text-sm font-medium"
+          >
+            Editar
+          </Link>
+        </div>
       </div>
 
       <dl className="flex flex-col gap-3 text-sm">
