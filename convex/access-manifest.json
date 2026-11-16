@@ -1,0 +1,30 @@
+{
+  "_comment": "Manifiesto de acceso (ARC-49). Lista TODAS las funciones públicas y rutas HTTP del despliegue con su guard. Lo comprueba scripts/check-access-manifest.mjs contra `npx convex function-spec` (comprobación A) y contra el código con AST (comprobación B). Política: cartera compartida del equipo, ver convex/lib/team.ts. Toda función pública nueva debe añadirse aquí con su guard, y a los casos de convex/lib/team.test.ts. De convex/auth.ts solo son públicas isAuthenticated, signIn y signOut: store es interna (function-spec la marca visibility internal), así que no figura; si pasara a pública, la comprobación A fallaría.",
+  "version": 1,
+  "functions": {
+    "auth.js:isAuthenticated": "convex-auth",
+    "auth.js:signIn": "convex-auth",
+    "auth.js:signOut": "convex-auth",
+    "clients.js:create": "requireTeamUser",
+    "clients.js:update": "requireTeamUser",
+    "clients.js:list": "getTeamUser",
+    "clients.js:get": "getTeamUser",
+    "clients.js:searchForPicker": "getTeamUser",
+    "clients.js:lookup": "getTeamUser",
+    "clients.js:citiesForPostalCode": "getTeamUser",
+    "contacts.js:create": "requireTeamUser",
+    "reminders.js:create": "requireTeamUser",
+    "reminders.js:get": "getTeamUser",
+    "reminders.js:update": "requireTeamUser",
+    "reminders.js:remove": "requireTeamUser",
+    "reminders.js:listPendingByAssignee": "getTeamUser",
+    "reminders.js:countDueByAssignee": "getTeamUser",
+    "reminders.js:listPendingByClient": "getTeamUser",
+    "users.js:list": "getTeamUser",
+    "users.js:current": "getTeamUser"
+  },
+  "httpRoutes": {
+    "GET /.well-known/jwks.json": "convex-auth",
+    "GET /.well-known/openid-configuration": "convex-auth"
+  }
+}
