@@ -12,6 +12,7 @@ import {
   INVALID_DATE,
   isValidISODate,
   optionLabel,
+  textOrEmpty,
 } from "./client-display";
 import { LANGUAGE_OPTIONS, SEX_OPTIONS } from "./client-form";
 import { todayISODateMadrid } from "./reminders";
@@ -133,6 +134,19 @@ describe("formatAddress", () => {
         province: null,
       }),
     ).toEqual(["Calle Mayor", "Xàtiva"]);
+  });
+});
+
+describe("textOrEmpty", () => {
+  test("recorta; vacío, solo espacios o no-string → guion", () => {
+    expect(textOrEmpty(" 600123456 ")).toBe("600123456");
+    expect(textOrEmpty("12345678Z")).toBe("12345678Z");
+    expect(textOrEmpty(undefined)).toBe(EMPTY);
+    expect(textOrEmpty("")).toBe(EMPTY);
+    expect(textOrEmpty("   ")).toBe(EMPTY);
+    expect(textOrEmpty("\t\n")).toBe(EMPTY);
+    expect(textOrEmpty(null)).toBe(EMPTY);
+    expect(textOrEmpty(600123456)).toBe(EMPTY);
   });
 });
 

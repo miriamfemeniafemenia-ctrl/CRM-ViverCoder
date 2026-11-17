@@ -37,6 +37,12 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+// Campo de texto simple (teléfonos, correo, DNI, referido): recortado; vacío,
+// solo espacios o no-string → guion, para no dejar una fila en blanco.
+export function textOrEmpty(value: unknown): string {
+  return text(value) || EMPTY;
+}
+
 // `YYYY-MM-DD` → `DD/MM/AAAA`, partiendo la cadena (sin `new Date`, para no
 // desfasar el día por la zona horaria). Mismo rango que el servidor: de
 // 1900-01-01 a hoy (Europe/Madrid).

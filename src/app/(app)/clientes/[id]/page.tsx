@@ -10,6 +10,7 @@ import {
   formatAddress,
   formatBirthDate,
   optionLabel,
+  textOrEmpty,
 } from "@/lib/client-display";
 import { LANGUAGE_OPTIONS, SEX_OPTIONS } from "@/lib/client-form";
 import { clientPageContext } from "@/lib/client-nav";
@@ -86,11 +87,11 @@ export default function Page({
   const addressLines = formatAddress(client.address);
   // Pares <dt>/<dd> de «Datos del cliente», en el orden de la ficha (ARC-50).
   const rows: { label: string; value: ReactNode }[] = [
-    { label: "Teléfono", value: client.phone || EMPTY },
-    { label: "Segundo teléfono", value: client.secondPhone || EMPTY },
-    { label: "WhatsApp", value: client.whatsapp || EMPTY },
-    { label: "Correo electrónico", value: client.email || EMPTY },
-    { label: "DNI/NIE", value: client.dni || EMPTY },
+    { label: "Teléfono", value: textOrEmpty(client.phone) },
+    { label: "Segundo teléfono", value: textOrEmpty(client.secondPhone) },
+    { label: "WhatsApp", value: textOrEmpty(client.whatsapp) },
+    { label: "Correo electrónico", value: textOrEmpty(client.email) },
+    { label: "DNI/NIE", value: textOrEmpty(client.dni) },
     { label: "Fecha de nacimiento", value: formatBirthDate(client.birthDate) },
     { label: "Sexo", value: optionLabel(SEX_OPTIONS, client.sex) },
     { label: "Idioma", value: optionLabel(LANGUAGE_OPTIONS, client.language) },
@@ -105,7 +106,7 @@ export default function Page({
               </span>
             )),
     },
-    { label: "Referido por", value: client.referredBy || EMPTY },
+    { label: "Referido por", value: textOrEmpty(client.referredBy) },
     { label: "Canal de entrada", value: CHANNEL_LABEL[client.channel] },
     { label: "Fecha de alta", value: new Date(client.createdAt).toLocaleString("es-ES") },
   ];
