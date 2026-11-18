@@ -391,6 +391,117 @@ describe("clients.update", () => {
   });
 });
 
+describe("prioridad (ARC-32)", () => {
+  const rejects = async (p: Promise<unknown>) => {
+    let failed = false;
+    try {
+      await p;
+    } catch {
+      failed = true;
+    }
+    expect(failed).toBe(true);
+  };
+
+  test("create: sin prioridad guarda «media»; con valor guarda ese valor", async () => {
+    const s = await setup();
+    const sin = await s.as.mutation(api.clients.create, basic);
+    const alta = await s.as.mutation(api.clients.create, { ...basic, priority: "alta" });
+    const baja = await s.as.mutation(api.clients.create, { ...basic, priority: "baja" });
+    expect((await getClient(s, sin))?.priority).toBe("media");
+    expect((await getClient(s, alta))?.priority).toBe("alta");
+    expect((await getClient(s, baja))?.priority).toBe("baja");
+  });
+
+  test("create: un valor no válido lo rechaza el validador y no se crea nada", async () => {
+    const s = await setup();
+    await rejects(
+      s.as.mutation(api.clients.create, { ...basic, priority: "urgente" as unknown as "alta" }),
+    );
+    expect(await clientCount(s)).toBe(0);
+  });
+
+  test("update: con prioridad la cambia y sube la versión", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const before = (await getClient(s, id))!;
+    await s.as.mutation(api.clients.update, {
+      id,
+      expectedVersion: before.updatedAt!,
+      ...basic,
+      priority: "alta",
+    });
+    const after = (await getClient(s, id))!;
+    expect(after.priority).toBe("alta");
+    expect(after.updatedAt!).toBeGreaterThan(before.updatedAt!);
+  });
+
+  test("update: sin prioridad conserva la actual (pestaña con la versión anterior de la app)", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, { ...basic, priority: "baja" });
+    const before = (await getClient(s, id))!;
+    await s.as.mutation(api.clients.update, {
+      id,
+      expectedVersion: before.updatedAt!,
+      ...basic,
+      name: "Otro nombre",
+    });
+    const after = (await getClient(s, id))!;
+    expect(after.name).toBe("Otro nombre");
+    expect(after.priority).toBe("baja");
+  });
+
+  test("update: un valor no válido se rechaza sin modificar el cliente", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const before = (await getClient(s, id))!;
+    await rejects(
+      s.as.mutation(api.clients.update, {
+        id,
+        expectedVersion: before.updatedAt!,
+        ...basic,
+        priority: "urgente" as unknown as "alta",
+      }),
+    );
+    expect(await getClient(s, id)).toEqual(before);
+  });
+
+  test("update con versión antigua y cambio de prioridad: conflicto y no cambia nada", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const before = (await getClient(s, id))!;
+    await s.as.mutation(api.clients.update, {
+      id,
+      expectedVersion: before.updatedAt!,
+      ...basic,
+      priority: "alta",
+    });
+    const afterFirst = (await getClient(s, id))!;
+    expect(
+      await errorData(
+        s.as.mutation(api.clients.update, {
+          id,
+          expectedVersion: before.updatedAt!,
+          ...basic,
+          priority: "baja",
+        }),
+      ),
+    ).toBe(CLIENT_ERRORS.editConflict);
+    expect(await getClient(s, id)).toEqual(afterFirst);
+  });
+
+  test("alta rápida (contacts.create) sigue guardando «media»", async () => {
+    const s = await setup();
+    const { clientId } = await s.as.mutation(api.contacts.create, {
+      target: { newClient: { name: "Rápido", phone: "600999888", channel: "llamada" } },
+      type: "llamada",
+      date: "2026-01-01",
+      note: "nota",
+      performedById: s.miriam,
+    });
+    expect((await getClient(s, clientId))?.priority).toBe("media");
+  });
+});
+
 describe("clients.citiesForPostalCode", () => {
   test("devuelve solo nombres de población distintos y ordenados, con el código normalizado", async () => {
     const s = await setup();

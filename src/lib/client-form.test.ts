@@ -8,8 +8,11 @@ import {
   CLIENT_ERRORS,
   normalizePostalCode as serverNormalizePostalCode,
 } from "../../convex/lib/clientInput";
+import { priorityValidator } from "../../convex/lib/priority";
 import { ASSIGNABLE_AGENT_ERROR, NOT_AUTHENTICATED } from "../../convex/lib/team";
 import {
+  DEFAULT_PRIORITY,
+  PRIORITY_OPTIONS,
   addressReducer,
   AddressState,
   clientToForm,
@@ -64,6 +67,14 @@ describe("copias de la lógica del servidor", () => {
       new Set([...Object.values(CLIENT_ERRORS), ASSIGNABLE_AGENT_ERROR, NOT_AUTHENTICATED]),
     );
   });
+  test("PRIORITY_OPTIONS: exactamente alta, media y baja, los valores de convex/lib/priority.ts", () => {
+    expect(PRIORITY_OPTIONS.map((o) => o.value)).toEqual(["alta", "media", "baja"]);
+    expect(PRIORITY_OPTIONS.map((o) => o.label)).toEqual(["Alta", "Media", "Baja"]);
+    expect(new Set(PRIORITY_OPTIONS.map((o) => o.value))).toEqual(
+      new Set(priorityValidator.members.map((m) => m.value)),
+    );
+    expect(DEFAULT_PRIORITY).toBe("media");
+  });
 });
 
 const agent = "agente1" as Id<"users">;
@@ -113,7 +124,20 @@ describe("cliente ↔ formulario ↔ datos enviados", () => {
       address: fullClient.address,
       referredBy: "Pepe",
       assignedAgentId: agent,
+      priority: "media",
     });
+    // La prioridad del cliente llega al formulario y se envía tal cual.
+    for (const priority of ["alta", "media", "baja"] as const) {
+      const client = { ...fullClient, priority };
+      expect(clientToForm(client).priority).toBe(priority);
+      expect(formToPayload(clientToForm(client), initialAddressState()).priority).toBe(priority);
+    }
+  });
+  test("prioridad: Media por defecto al crear; documento sin prioridad (escrito a mano) → Media", () => {
+    expect(emptyClientForm().priority).toBe("media");
+    expect(formToPayload(emptyClientForm(), initialAddressState()).priority).toBe("media");
+    const legacy = { ...fullClient, priority: undefined } as unknown as Doc<"clients">;
+    expect(clientToForm(legacy).priority).toBe("media");
   });
   test("vacíos → undefined y dirección vacía → sin dirección", () => {
     const payload = formToPayload({ ...emptyClientForm(), name: " Ana ", phone: " 600 " }, initialAddressState());
@@ -131,6 +155,7 @@ describe("cliente ↔ formulario ↔ datos enviados", () => {
       address: undefined,
       referredBy: undefined,
       assignedAgentId: undefined,
+      priority: "media",
     });
   });
   test("dirección parcial: solo floorDoor; código válido normalizado; inválido tal cual", () => {
