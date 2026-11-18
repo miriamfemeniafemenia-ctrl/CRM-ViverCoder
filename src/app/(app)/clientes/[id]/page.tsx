@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { type ReactNode, use } from "react";
+import { type ReactNode, use, useState } from "react";
+import { PriorityBadge } from "@/components/priority-badge";
 import { ReminderItem } from "@/components/reminder-item";
 import {
   agentDisplay,
@@ -12,7 +13,7 @@ import {
   optionLabel,
   textOrEmpty,
 } from "@/lib/client-display";
-import { LANGUAGE_OPTIONS, SEX_OPTIONS } from "@/lib/client-form";
+import { DEFAULT_PRIORITY, LANGUAGE_OPTIONS, SEX_OPTIONS } from "@/lib/client-form";
 import { clientPageContext } from "@/lib/client-nav";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -34,12 +35,13 @@ const CHANNEL_LABEL: Record<string, string> = {
 
 // /clientes/[id] — P3, ficha de cliente. Muestra los datos del alta (ARC-10/
 // ARC-9), los datos ampliados (ARC-50: DNI, nacimiento, dirección, agente…;
-// vacíos con guion, como teléfono y correo) y una lista mínima de recordatorios pendientes
+// vacíos con guion, como teléfono y correo), la prioridad con cambio rápido
+// (ARC-33) y una lista mínima de recordatorios pendientes
 // (ARC-60, alta con asignación; ARC-61, editar y eliminar). La sección
 // completa de F5 (vencidos destacados, marcar como hecho) es ARC-16; el resto
 // de funciones de la ficha (F3, F4, F7, F8, F10 — historial, siniestros,
 // pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-18, ARC-19, ARC-21,
-// ARC-33, ARC-52, ARC-56.
+// ARC-52, ARC-56.
 //
 // `?from=` dice desde dónde se abrió (regla de navegación ARC-8: «volver» lleva
 // al origen) y, desde P1 con un cliente elegido en el filtro, `?vista=recordatorios`
@@ -61,6 +63,8 @@ export default function Page({
     clientId,
   });
   const removeReminder = useMutation(api.reminders.remove);
+  const setPriority = useMutation(api.clients.setPriority);
+  const [priorityError, setPriorityError] = useState<string | null>(null);
   const users = useQuery(api.users.list);
   const userNameById = new Map((users ?? []).map((u) => [u._id, u.name]));
 
@@ -113,8 +117,10 @@ export default function Page({
 
   const clientCard = (
     <div className="border-border-default bg-surface-card max-w-lg rounded-lg border p-6 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="min-w-0">
+      {/* La cabecera se parte en dos líneas si no cabe: el nombre conserva un
+          ancho mínimo y los badges bajan a la línea siguiente (ARC-33). */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-[1_1_12rem]">
           <h1 className="text-text-primary text-2xl font-semibold [overflow-wrap:anywhere]">
             {client.name}
           </h1>
@@ -136,7 +142,15 @@ export default function Page({
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          {/* Prioridad con cambio rápido (ARC-33). */}
+          <PriorityBadge
+            // Salvaguarda ante un documento escrito a mano sin prioridad (como
+            // `clientToForm` en P4); el esquema la declara obligatoria.
+            priority={client.priority ?? DEFAULT_PRIORITY}
+            onChange={(priority) => setPriority({ id: clientId, priority })}
+            onError={setPriorityError}
+          />
           <span className="rounded-pill bg-sale-interesado-bg text-sale-interesado-fg px-3 py-1 text-xs font-medium">
             {SALE_STATUS_LABEL[client.saleStatus]}
           </span>
@@ -148,6 +162,10 @@ export default function Page({
             Editar
           </Link>
         </div>
+      </div>
+      {/* Siempre presente (vacía si no hay error) para que el aviso se anuncie. */}
+      <div role="alert" className="text-warning-fg mb-4 text-sm empty:hidden">
+        {priorityError}
       </div>
 
       <dl className="flex flex-col gap-3 text-sm">

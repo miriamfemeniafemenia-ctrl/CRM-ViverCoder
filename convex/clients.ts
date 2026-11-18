@@ -9,12 +9,14 @@ import {
   normalizeClientFields,
   normalizePostalCode,
 } from "./lib/clientInput";
+import { priorityValidator } from "./lib/priority";
 import { getTeamUser, requireTeamUser } from "./lib/team";
 
 // D1 — Cliente. Alta (ARC-10/P4, ampliada en ARC-49), edición con control de
 // ediciones simultáneas (ARC-11), sugerencias de población por código postal
-// (ARC-66) y listado con buscador (ARC-9/P2). La prioridad se elige al crear y
-// se cambia al editar (ARC-32); el estado de venta no se edita aquí.
+// (ARC-66) y listado con buscador (ARC-9/P2). La prioridad se elige al crear,
+// se cambia al editar (ARC-32) y también desde la ficha P3 con `setPriority`
+// (ARC-33); el estado de venta no se edita aquí.
 // Las reglas de los campos viven en lib/clientInput.ts (compartidas con el alta
 // inline de "Anotar interacción", ARC-72). Acceso: cartera compartida del
 // equipo, guards de lib/team.ts como primera sentencia de cada handler.
@@ -82,6 +84,31 @@ export const update = mutation({
     await ctx.db.patch(id, {
       ...fields,
       ...(priority === undefined ? {} : { priority }),
+      updatedAt: Math.max(Date.now(), currentVersion + 1),
+    });
+  },
+});
+
+// Cambio rápido de prioridad desde la ficha P3 (ARC-33). Un solo campo, sin
+// `expectedVersion`: el badge muestra el valor en vivo y, si dos personas eligen
+// a la vez, gana la última (como cualquier selector rápido). Si el valor no
+// cambia no se escribe nada, para no subir la versión sin motivo. Si cambia, la
+// versión SÍ sube: así un P4 «Editar» abierto con la prioridad anterior recibe
+// el aviso de edición simultánea en vez de devolver el valor antiguo.
+export const setPriority = mutation({
+  args: { id: v.id("clients"), priority: priorityValidator },
+  handler: async (ctx, args) => {
+    await requireTeamUser(ctx);
+    const client = await ctx.db.get(args.id);
+    if (!client) {
+      throw new ConvexError(CLIENT_ERRORS.notFound);
+    }
+    if (client.priority === args.priority) {
+      return;
+    }
+    const currentVersion = client.updatedAt ?? client.createdAt;
+    await ctx.db.patch(args.id, {
+      priority: args.priority,
       updatedAt: Math.max(Date.now(), currentVersion + 1),
     });
   },
