@@ -25,9 +25,11 @@ import {
   KNOWN_SERVER_ERRORS,
   Language,
   LANGUAGE_OPTIONS,
+  PRIORITY_OPTIONS,
   provinceMismatch,
   SEX_OPTIONS,
 } from "@/lib/client-form";
+import type { Priority } from "@/types";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -366,6 +368,21 @@ export function ClientForm({
       </Section>
 
       <Section title="Gestión interna">
+        {/* Prioridad (ARC-32): obligatoria, sin opción vacía; Media por defecto. */}
+        <Field label="Prioridad">
+          <select
+            value={fields.priority}
+            onChange={(e) => set("priority", e.target.value as Priority)}
+            disabled={isSaving}
+            className={selectClass}
+          >
+            {PRIORITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Referido por">
           <input
             type="text"

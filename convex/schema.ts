@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { addressValidator } from "./lib/addressFields";
+import { priorityValidator } from "./lib/priority";
 import { v } from "convex/values";
 
 /**
@@ -84,7 +85,8 @@ export default defineSchema({
       v.literal("cerrado"),
       v.literal("perdido"),
     ),
-    priority: v.union(v.literal("alta"), v.literal("media"), v.literal("baja")),
+    // Contrato único en lib/priority.ts (ARC-32).
+    priority: priorityValidator,
     dni: v.optional(v.string()),
     birthDate: v.optional(v.string()), // ISO date
     sex: v.optional(v.string()),

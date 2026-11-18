@@ -13,8 +13,8 @@ import { getTeamUser, requireTeamUser } from "./lib/team";
 
 // D1 — Cliente. Alta (ARC-10/P4, ampliada en ARC-49), edición con control de
 // ediciones simultáneas (ARC-11), sugerencias de población por código postal
-// (ARC-66) y listado con buscador (ARC-9/P2). La prioridad y el estado de venta
-// no se editan aquí (ARC-32/ARC-33, P3).
+// (ARC-66) y listado con buscador (ARC-9/P2). La prioridad se elige al crear y
+// se cambia al editar (ARC-32); el estado de venta no se edita aquí.
 // Las reglas de los campos viven en lib/clientInput.ts (compartidas con el alta
 // inline de "Anotar interacción", ARC-72). Acceso: cartera compartida del
 // equipo, guards de lib/team.ts como primera sentencia de cada handler.
@@ -50,8 +50,10 @@ export const create = mutation({
 });
 
 // Edición de cliente (P4 editar, ARC-11). Sustituye TODOS los campos
-// editables: el que llega vacío se borra. No toca `saleStatus`, `priority` ni
-// `createdAt`.
+// editables: el que llega vacío se borra. No toca `saleStatus` ni `createdAt`.
+// La prioridad (ARC-32) es obligatoria en el documento: si llega se guarda, y
+// si no llega (p. ej. una pestaña con la versión anterior de la app) se
+// conserva la actual; nunca se borra.
 //
 // Control optimista: `expectedVersion` es la versión con la que se abrió el
 // formulario (`updatedAt ?? createdAt`). Si ya no coincide, otra persona guardó
@@ -63,7 +65,7 @@ export const update = mutation({
   args: { id: v.id("clients"), expectedVersion: v.number(), ...clientFields },
   handler: async (ctx, args) => {
     await requireTeamUser(ctx);
-    const { id, expectedVersion, ...input } = args;
+    const { id, expectedVersion, priority, ...input } = args;
     const client = await ctx.db.get(id);
     if (!client) {
       throw new ConvexError(CLIENT_ERRORS.notFound);
@@ -75,8 +77,11 @@ export const update = mutation({
     const fields = normalizeClientFields(input);
     await assertClientReferences(ctx, fields, id);
     // `patch` con `undefined` borra el campo: así se vacían los que llegan vacíos.
+    // La prioridad NO sigue esa regla: sin valor se omite del patch para no
+    // borrar un campo obligatorio.
     await ctx.db.patch(id, {
       ...fields,
+      ...(priority === undefined ? {} : { priority }),
       updatedAt: Math.max(Date.now(), currentVersion + 1),
     });
   },

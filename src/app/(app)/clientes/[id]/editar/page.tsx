@@ -16,8 +16,8 @@ import { api } from "../../../../../../convex/_generated/api";
 
 // /clientes/[id]/editar — P4 en modo edición (ARC-11, con los campos de
 // ARC-49 y el código postal de ARC-66). Siempre cierra hacia P3 (regla de
-// navegación del PRD), al guardar y al cancelar. No edita el estado de venta ni
-// la prioridad (se gestionan en P3).
+// navegación del PRD), al guardar y al cancelar. Edita también la prioridad
+// (ARC-32); el estado de venta no.
 //
 // El `id` llega de la URL y puede estar mal escrito: primero se valida con
 // `clients.lookup` (acepta texto y devuelve null si no es un cliente) y solo

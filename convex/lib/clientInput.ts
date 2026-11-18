@@ -2,6 +2,7 @@ import { ConvexError, Infer, v } from "convex/values";
 import { Doc, Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { addressValidator } from "./addressFields";
+import { priorityValidator } from "./priority";
 import { assertAssignableUser } from "./team";
 import { isValidISODate, todayISODateMadrid } from "./validation";
 
@@ -54,6 +55,10 @@ export const clientDetailsFields = {
   address: v.optional(addressValidator),
   referredBy: v.optional(v.string()),
   assignedAgentId: v.optional(v.id("users")),
+  // Prioridad (ARC-32). Opcional en los argumentos: al crear, sin valor →
+  // «media»; al editar, sin valor → se conserva la actual. Es obligatoria en el
+  // documento, así que nunca se «vacía». No pasa por normalizeClientFields.
+  priority: v.optional(priorityValidator),
 };
 
 // Básicos + ampliados: argumentos de `clients.create` y `clients.update`.
@@ -264,11 +269,13 @@ export async function insertClient(
 ) {
   const fields = normalizeClientFields(input);
   await assertClientReferences(ctx, fields);
+  // El alta rápida (NewClientInput) no lleva prioridad: siempre «media».
+  const { priority }: Partial<ClientFieldsInput> = input;
   const now = Date.now();
   return await ctx.db.insert("clients", {
     ...fields,
     saleStatus: "interesado",
-    priority: "media",
+    priority: priority ?? "media",
     createdAt: now,
     updatedAt: now,
   });

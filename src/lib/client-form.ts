@@ -7,6 +7,7 @@
 // y los mensajes de error). Si se toca una copia, tocar la otra; las pruebas
 // (client-form.test.ts) comparan ambas.
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { Priority } from "../types";
 
 // ---------------------------------------------------------------------------
 // Código postal y provincia
@@ -224,6 +225,15 @@ export const LANGUAGE_OPTIONS = [
 ] as const;
 export type Language = (typeof LANGUAGE_OPTIONS)[number]["value"];
 
+// Prioridad (ARC-32). Copia de los valores de `priorityValidator`
+// (convex/lib/priority.ts); la prueba comprueba que coinciden.
+export const PRIORITY_OPTIONS: readonly { value: Priority; label: string }[] = [
+  { value: "alta", label: "Alta" },
+  { value: "media", label: "Media" },
+  { value: "baja", label: "Baja" },
+];
+export const DEFAULT_PRIORITY: Priority = "media";
+
 export type ClientFormFields = {
   name: string;
   phone: string;
@@ -237,6 +247,7 @@ export type ClientFormFields = {
   language: Language | "";
   referredBy: string;
   assignedAgentId: Id<"users"> | "";
+  priority: Priority;
 };
 
 export function emptyClientForm(): ClientFormFields {
@@ -253,6 +264,7 @@ export function emptyClientForm(): ClientFormFields {
     language: "",
     referredBy: "",
     assignedAgentId: "",
+    priority: DEFAULT_PRIORITY,
   };
 }
 
@@ -270,6 +282,8 @@ export function clientToForm(client: Doc<"clients">): ClientFormFields {
     language: client.language ?? "",
     referredBy: client.referredBy ?? "",
     assignedAgentId: client.assignedAgentId ?? "",
+    // Obligatoria en el schema; salvaguarda ante un documento escrito a mano.
+    priority: client.priority ?? DEFAULT_PRIORITY,
   };
 }
 
@@ -330,6 +344,8 @@ export function formToPayload(fields: ClientFormFields, address: AddressState) {
     address: hasAddress ? addressPayload : undefined,
     referredBy: optional(fields.referredBy),
     assignedAgentId: fields.assignedAgentId || undefined,
+    // Siempre se envía (ARC-32): en update, sin ella se conservaría la actual.
+    priority: fields.priority,
   };
 }
 
