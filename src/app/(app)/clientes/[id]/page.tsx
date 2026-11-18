@@ -13,7 +13,7 @@ import {
   optionLabel,
   textOrEmpty,
 } from "@/lib/client-display";
-import { LANGUAGE_OPTIONS, SEX_OPTIONS } from "@/lib/client-form";
+import { DEFAULT_PRIORITY, LANGUAGE_OPTIONS, SEX_OPTIONS } from "@/lib/client-form";
 import { clientPageContext } from "@/lib/client-nav";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -145,7 +145,9 @@ export default function Page({
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {/* Prioridad con cambio rápido (ARC-33). */}
           <PriorityBadge
-            priority={client.priority}
+            // Salvaguarda ante un documento escrito a mano sin prioridad (como
+            // `clientToForm` en P4); el esquema la declara obligatoria.
+            priority={client.priority ?? DEFAULT_PRIORITY}
             onChange={(priority) => setPriority({ id: clientId, priority })}
             onError={setPriorityError}
           />
