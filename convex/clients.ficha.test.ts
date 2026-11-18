@@ -502,6 +502,74 @@ describe("prioridad (ARC-32)", () => {
   });
 });
 
+describe("clients.setPriority (ARC-33)", () => {
+  const version = (c: { updatedAt?: number; createdAt: number } | null) =>
+    c ? (c.updatedAt ?? c.createdAt) : null;
+
+  test("cambia la prioridad, sube la versión y no toca el resto de campos", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, { ...basic, email: "ana@test.es" });
+    const before = await getClient(s, id);
+    await s.as.mutation(api.clients.setPriority, { id, priority: "alta" });
+    const after = await getClient(s, id);
+    expect(after?.priority).toBe("alta");
+    expect(version(after)!).toBeGreaterThan(version(before)!);
+    expect({ ...after, priority: before?.priority, updatedAt: before?.updatedAt }).toEqual(before);
+  });
+
+  test("con la misma prioridad no escribe nada (ni sube la versión)", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const before = await getClient(s, id);
+    await s.as.mutation(api.clients.setPriority, { id, priority: "media" });
+    expect(await getClient(s, id)).toEqual(before);
+  });
+
+  test("un valor no válido lo rechaza el validador y el cliente queda igual", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const before = await getClient(s, id);
+    let failed = false;
+    try {
+      await s.as.mutation(api.clients.setPriority, {
+        id,
+        priority: "urgente" as unknown as "alta",
+      });
+    } catch {
+      failed = true;
+    }
+    expect(failed).toBe(true);
+    expect(await getClient(s, id)).toEqual(before);
+  });
+
+  test("un cliente borrado da «No se encontró este cliente»", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    await s.t.run((ctx) => ctx.db.delete(id));
+    expect(await errorData(s.as.mutation(api.clients.setPriority, { id, priority: "alta" }))).toBe(
+      CLIENT_ERRORS.notFound,
+    );
+  });
+
+  test("un P4 abierto antes del cambio recibe conflicto al guardar", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const opened = version(await getClient(s, id))!;
+    await s.as.mutation(api.clients.setPriority, { id, priority: "baja" });
+    expect(
+      await errorData(
+        s.as.mutation(api.clients.update, {
+          id,
+          expectedVersion: opened,
+          ...basic,
+          priority: "media",
+        }),
+      ),
+    ).toBe(CLIENT_ERRORS.editConflict);
+    expect((await getClient(s, id))?.priority).toBe("baja");
+  });
+});
+
 describe("clients.citiesForPostalCode", () => {
   test("devuelve solo nombres de población distintos y ordenados, con el código normalizado", async () => {
     const s = await setup();

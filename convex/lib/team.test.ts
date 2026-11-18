@@ -77,6 +77,10 @@ const cases: Record<string, Case> = {
         channel: "web",
       }),
   },
+  "clients.js:setPriority": {
+    kind: "mutation",
+    run: (s) => s.ajena.mutation(api.clients.setPriority, { id: s.clientId, priority: "alta" }),
+  },
   "clients.js:list": { kind: "query", expected: [], run: (s) => s.ajena.query(api.clients.list, {}) },
   "clients.js:get": { kind: "query", expected: null, run: (s) => s.ajena.query(api.clients.get, { id: s.clientId }) },
   "clients.js:searchForPicker": {

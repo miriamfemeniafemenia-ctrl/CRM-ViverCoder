@@ -232,6 +232,13 @@
   --color-sale-perdido-fg: var(--color-sale-perdido-fg);
   --color-sale-perdido-bg: var(--color-sale-perdido-bg);
 
+  --color-priority-alta-fg: var(--color-priority-alta-fg);
+  --color-priority-alta-bg: var(--color-priority-alta-bg);
+  --color-priority-media-fg: var(--color-priority-media-fg);
+  --color-priority-media-bg: var(--color-priority-media-bg);
+  --color-priority-baja-fg: var(--color-priority-baja-fg);
+  --color-priority-baja-bg: var(--color-priority-baja-bg);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
