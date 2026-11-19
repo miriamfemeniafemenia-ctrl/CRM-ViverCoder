@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import {
+  applySaleStatus,
   assertClientReferences,
   CLIENT_ERRORS,
   clientFields,
@@ -10,23 +11,18 @@ import {
   normalizePostalCode,
 } from "./lib/clientInput";
 import { priorityValidator } from "./lib/priority";
+import { saleStatusValidator } from "./lib/saleStatus";
 import { getTeamUser, requireTeamUser } from "./lib/team";
 
 // D1 — Cliente. Alta (ARC-10/P4, ampliada en ARC-49), edición con control de
 // ediciones simultáneas (ARC-11), sugerencias de población por código postal
 // (ARC-66) y listado con buscador (ARC-9/P2). La prioridad se elige al crear,
 // se cambia al editar (ARC-32) y también desde la ficha P3 con `setPriority`
-// (ARC-33); el estado de venta no se edita aquí.
+// (ARC-33). El estado de venta nace «interesado» y se cambia desde P3 con
+// `setSaleStatus` (F7/ARC-18); P4 «Editar» no lo toca.
 // Las reglas de los campos viven en lib/clientInput.ts (compartidas con el alta
 // inline de "Anotar interacción", ARC-72). Acceso: cartera compartida del
 // equipo, guards de lib/team.ts como primera sentencia de cada handler.
-
-const saleStatusValidator = v.union(
-  v.literal("interesado"),
-  v.literal("presupuesto"),
-  v.literal("cerrado"),
-  v.literal("perdido"),
-);
 
 // Proyección mínima para el selector de cliente de "Anotar interacción"
 // (ARC-72): nada de email, DNI, dirección, etc.
@@ -111,6 +107,29 @@ export const setPriority = mutation({
       priority: args.priority,
       updatedAt: Math.max(Date.now(), currentVersion + 1),
     });
+  },
+});
+
+// Cambio de estado de venta desde la ficha P3 (F7/ARC-18). Cualquier estado a
+// cualquier otro (no es un flujo lineal). Sin `expectedVersion`, como
+// `setPriority`: un campo visible en vivo, gana el último. Devuelve el
+// resultado real de la mutation (ver `applySaleStatus`): la ficha decide el
+// aviso de venta cerrada (ARC-19) con él, nunca con el valor que tenía en
+// pantalla.
+export const setSaleStatus = mutation({
+  args: { id: v.id("clients"), saleStatus: saleStatusValidator },
+  returns: v.object({
+    changed: v.boolean(),
+    previousSaleStatus: saleStatusValidator,
+    saleStatus: saleStatusValidator,
+  }),
+  handler: async (ctx, args) => {
+    await requireTeamUser(ctx);
+    const client = await ctx.db.get(args.id);
+    if (!client) {
+      throw new ConvexError(CLIENT_ERRORS.notFound);
+    }
+    return await applySaleStatus(ctx, client, args.saleStatus);
   },
 });
 

@@ -2,26 +2,18 @@
 
 import { ConvexError } from "convex/values";
 import { useEffect, useId, useRef, useState } from "react";
-import { KNOWN_SERVER_ERRORS, PRIORITY_OPTIONS } from "@/lib/client-form";
-import {
-  createSaveGuard,
-  nextIndex,
-  priorityAriaLabel,
-  priorityBadgeClass,
-} from "@/lib/priority-menu";
-import type { Priority } from "@/types";
+import { badgeAriaLabel, createSaveGuard, menuAlign, nextIndex } from "@/lib/badge-menu";
+import { KNOWN_SERVER_ERRORS } from "@/lib/client-form";
 
-const SAVE_ERROR = "No se ha podido cambiar la prioridad. Inténtalo de nuevo.";
-
-function errorMessage(err: unknown): string {
+function errorMessage(err: unknown, fallback: string): string {
   const data = err instanceof ConvexError ? err.data : undefined;
-  return typeof data === "string" && KNOWN_SERVER_ERRORS.has(data) ? data : SAVE_ERROR;
+  return typeof data === "string" && KNOWN_SERVER_ERRORS.has(data) ? data : fallback;
 }
 
-// Badge de prioridad de la ficha P3 con cambio rápido (ARC-33). Implementación
-// propia: toma como referencia visual y de comportamiento `StatusBadge`
-// (dominio priority) y `Popover` del sistema de diseño, que no existen como
-// componentes de la app.
+// Badge con cambio rápido de la ficha P3: prioridad (ARC-33) y estado de venta
+// (ARC-18). Implementación propia: toma como referencia visual y de
+// comportamiento `StatusBadge` y `Popover` del sistema de diseño, que no
+// existen como componentes de la app.
 //
 // Patrón WAI-ARIA «menu button»: al abrir, el foco va a la opción actual;
 // ↓/↑ circulares, Inicio/Fin, Enter/Espacio eligen, Escape cierra y devuelve el
@@ -33,19 +25,31 @@ function errorMessage(err: unknown): string {
 // anuncia; no se usa `disabled` para no perder el foco.
 //
 // El error no se pinta aquí: se entrega a `onError` para que la página lo
-// muestre en su región `role="alert"` bajo la cabecera (null = sin error).
-export function PriorityBadge({
-  priority,
+// muestre en su región `role="alert"` (null = sin error).
+export function BadgeMenu<T extends string>({
+  value,
+  options,
+  badgeClass,
+  name,
   onChange,
   onError,
+  saveErrorMessage,
 }: {
-  priority: Priority;
-  onChange: (priority: Priority) => Promise<unknown>;
+  value: T;
+  options: readonly { value: T; label: string }[];
+  badgeClass: (value: T) => string;
+  // Nombre del campo, para el texto accesible y el menú: «Prioridad».
+  name: string;
+  onChange: (value: T) => Promise<unknown>;
   onError: (message: string | null) => void;
+  // Mensaje si el guardado falla por un error no previsto: «No se ha podido
+  // cambiar la prioridad. Inténtalo de nuevo.».
+  saveErrorMessage: string;
 }) {
   const [open, setOpen] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [align, setAlign] = useState<"start" | "end">("start");
   // Un único guard por montaje: si se recreara en cada render perdería la
   // exclusión mutua.
   const [guard] = useState(createSaveGuard);
@@ -53,6 +57,7 @@ export function PriorityBadge({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const menuId = useId();
+  const label = options.find((o) => o.value === value)?.label ?? value;
 
   // Foco en la opción activa mientras el menú está abierto.
   useEffect(() => {
@@ -72,10 +77,14 @@ export function PriorityBadge({
   function openMenu() {
     if (guard.isBusy()) return;
     onError(null);
+    // En móvil, un badge pegado a la derecha abre el menú hacia la izquierda
+    // para que no se salga de la pantalla.
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) setAlign(menuAlign(rect.left, document.documentElement.clientWidth));
     setFocusIndex(
       Math.max(
         0,
-        PRIORITY_OPTIONS.findIndex((o) => o.value === priority),
+        options.findIndex((o) => o.value === value),
       ),
     );
     setOpen(true);
@@ -86,15 +95,15 @@ export function PriorityBadge({
     buttonRef.current?.focus();
   }
 
-  function choose(next: Priority) {
+  function choose(next: T) {
     if (guard.isBusy()) return;
     closeMenu();
-    if (next === priority) return;
+    if (next === value) return;
     const run = guard.run(() => onChange(next));
     if (run === false) return;
     setSaving(true);
     run
-      .catch((err: unknown) => onError(errorMessage(err)))
+      .catch((err: unknown) => onError(errorMessage(err, saveErrorMessage)))
       .finally(() => setSaving(false));
   }
 
@@ -106,7 +115,7 @@ export function PriorityBadge({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label={priorityAriaLabel(priority, saving)}
+        aria-label={badgeAriaLabel(name, label, saving)}
         aria-disabled={saving || undefined}
         aria-busy={saving || undefined}
         onClick={() => {
@@ -123,9 +132,9 @@ export function PriorityBadge({
         className="focus-visible:outline-border-focus inline-flex min-h-[var(--tap-target-min)] min-w-[var(--tap-target-min)] items-center justify-center rounded-md focus-visible:outline-2 aria-disabled:cursor-progress aria-disabled:opacity-60"
       >
         <span
-          className={`rounded-pill inline-flex items-center gap-1 px-3 py-1 text-xs font-medium whitespace-nowrap ${priorityBadgeClass(priority)}`}
+          className={`rounded-pill inline-flex items-center gap-1 px-3 py-1 text-xs font-medium whitespace-nowrap ${badgeClass(value)}`}
         >
-          {PRIORITY_OPTIONS.find((o) => o.value === priority)?.label ?? priority}
+          {label}
           <span aria-hidden="true">▾</span>
         </span>
       </button>
@@ -134,11 +143,11 @@ export function PriorityBadge({
         <div
           id={menuId}
           role="menu"
-          aria-label="Prioridad"
-          className="border-border-default bg-surface-card absolute top-full left-0 z-50 mt-1 flex min-w-40 flex-col rounded-md border p-2 shadow-md"
+          aria-label={name}
+          className={`border-border-default bg-surface-card absolute top-full z-50 mt-1 flex max-w-[13rem] min-w-40 flex-col rounded-md border p-2 shadow-md ${align === "end" ? "right-0" : "left-0"}`}
         >
-          {PRIORITY_OPTIONS.map((option, i) => {
-            const checked = option.value === priority;
+          {options.map((option, i) => {
+            const checked = option.value === value;
             return (
               <button
                 key={option.value}
@@ -151,7 +160,7 @@ export function PriorityBadge({
                 tabIndex={i === focusIndex ? 0 : -1}
                 onClick={() => choose(option.value)}
                 onKeyDown={(e) => {
-                  const next = nextIndex(i, e.key, PRIORITY_OPTIONS.length);
+                  const next = nextIndex(i, e.key, options.length);
                   if (next !== null) {
                     e.preventDefault();
                     setFocusIndex(next);
@@ -171,7 +180,7 @@ export function PriorityBadge({
                   {checked ? "✓" : ""}
                 </span>
                 <span
-                  className={`rounded-pill px-3 py-1 text-xs font-medium ${priorityBadgeClass(option.value)}`}
+                  className={`rounded-pill px-3 py-1 text-xs font-medium whitespace-nowrap ${badgeClass(option.value)}`}
                 >
                   {option.label}
                 </span>

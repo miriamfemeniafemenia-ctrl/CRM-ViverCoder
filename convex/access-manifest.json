@@ -8,6 +8,7 @@
     "clients.js:create": "requireTeamUser",
     "clients.js:update": "requireTeamUser",
     "clients.js:setPriority": "requireTeamUser",
+    "clients.js:setSaleStatus": "requireTeamUser",
     "clients.js:list": "getTeamUser",
     "clients.js:get": "getTeamUser",
     "clients.js:searchForPicker": "getTeamUser",

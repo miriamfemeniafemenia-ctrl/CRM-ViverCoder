@@ -13,6 +13,7 @@ import { ASSIGNABLE_AGENT_ERROR, NOT_AUTHENTICATED } from "../../convex/lib/team
 import {
   DEFAULT_PRIORITY,
   PRIORITY_OPTIONS,
+  priorityBadgeClass,
   addressReducer,
   AddressState,
   clientToForm,
@@ -74,6 +75,11 @@ describe("copias de la lógica del servidor", () => {
       new Set(priorityValidator.members.map((m) => m.value)),
     );
     expect(DEFAULT_PRIORITY).toBe("media");
+  });
+  test("priorityBadgeClass: cada valor del servidor tiene SU clase de color (ARC-33)", () => {
+    for (const p of priorityValidator.members.map((m) => m.value)) {
+      expect(priorityBadgeClass(p)).toBe(`bg-priority-${p}-bg text-priority-${p}-fg`);
+    }
   });
 });
 

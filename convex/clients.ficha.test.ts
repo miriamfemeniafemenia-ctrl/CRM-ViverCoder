@@ -570,6 +570,121 @@ describe("clients.setPriority (ARC-33)", () => {
   });
 });
 
+describe("clients.setSaleStatus (ARC-18)", () => {
+  const version = (c: { updatedAt?: number; createdAt: number } | null) =>
+    c ? (c.updatedAt ?? c.createdAt) : null;
+  const all = ["interesado", "presupuesto", "cerrado", "perdido"] as const;
+
+  test("se puede pasar de cualquier estado a cualquier otro (no es lineal)", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    for (const from of all) {
+      for (const to of all) {
+        if (from === to) continue;
+        await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: from });
+        const r = await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: to });
+        expect(r).toEqual({ changed: true, previousSaleStatus: from, saleStatus: to });
+        expect((await getClient(s, id))?.saleStatus).toBe(to);
+      }
+    }
+  });
+
+  test("cambiar sube la versión y no toca el resto de campos", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, { ...basic, email: "ana@test.es" });
+    const before = await getClient(s, id);
+    await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: "presupuesto" });
+    const after = await getClient(s, id);
+    expect(after?.saleStatus).toBe("presupuesto");
+    expect(version(after)!).toBeGreaterThan(version(before)!);
+    expect({ ...after, saleStatus: before?.saleStatus, updatedAt: before?.updatedAt }).toEqual(
+      before,
+    );
+  });
+
+  test("resultado: interesado → cerrado devuelve el cambio real", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    expect(await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: "cerrado" })).toEqual({
+      changed: true,
+      previousSaleStatus: "interesado",
+      saleStatus: "cerrado",
+    });
+  });
+
+  test("mismo valor: changed false y no escribe nada (ni sube la versión)", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: "cerrado" });
+    const before = await getClient(s, id);
+    expect(await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: "cerrado" })).toEqual({
+      changed: false,
+      previousSaleStatus: "cerrado",
+      saleStatus: "cerrado",
+    });
+    expect(await getClient(s, id)).toEqual(before);
+  });
+
+  test("concurrencia: el resultado refleja el estado real, no el que veía cada persona", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const asAntonio = s.t.withIdentity({ subject: `${s.antonio}|sesion-test` });
+    // A y B ven «interesado». A cierra primero; B, con la pantalla sin
+    // actualizar, también elige «cerrado»: para B no hubo cambio (no habría aviso).
+    await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: "cerrado" });
+    expect(await asAntonio.mutation(api.clients.setSaleStatus, { id, saleStatus: "cerrado" })).toEqual({
+      changed: false,
+      previousSaleStatus: "cerrado",
+      saleStatus: "cerrado",
+    });
+    // Si B elige otro estado, el anterior que recibe es el real («cerrado»).
+    expect(await asAntonio.mutation(api.clients.setSaleStatus, { id, saleStatus: "perdido" })).toEqual({
+      changed: true,
+      previousSaleStatus: "cerrado",
+      saleStatus: "perdido",
+    });
+  });
+
+  test("un valor no válido lo rechaza el validador y el cliente queda igual", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const before = await getClient(s, id);
+    let failed = false;
+    try {
+      await s.as.mutation(api.clients.setSaleStatus, {
+        id,
+        saleStatus: "ganado" as unknown as "cerrado",
+      });
+    } catch {
+      failed = true;
+    }
+    expect(failed).toBe(true);
+    expect(await getClient(s, id)).toEqual(before);
+  });
+
+  test("un cliente borrado da «No se encontró este cliente»", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    await s.t.run((ctx) => ctx.db.delete(id));
+    expect(
+      await errorData(s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: "cerrado" })),
+    ).toBe(CLIENT_ERRORS.notFound);
+  });
+
+  test("un P4 abierto antes del cambio recibe conflicto al guardar", async () => {
+    const s = await setup();
+    const id = await s.as.mutation(api.clients.create, basic);
+    const opened = version(await getClient(s, id))!;
+    await s.as.mutation(api.clients.setSaleStatus, { id, saleStatus: "perdido" });
+    expect(
+      await errorData(
+        s.as.mutation(api.clients.update, { id, expectedVersion: opened, ...basic }),
+      ),
+    ).toBe(CLIENT_ERRORS.editConflict);
+    expect((await getClient(s, id))?.saleStatus).toBe("perdido");
+  });
+});
+
 describe("clients.citiesForPostalCode", () => {
   test("devuelve solo nombres de población distintos y ordenados, con el código normalizado", async () => {
     const s = await setup();
