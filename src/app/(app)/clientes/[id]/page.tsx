@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { type ReactNode, use, useState } from "react";
-import { PriorityBadge } from "@/components/priority-badge";
+import { BadgeMenu } from "@/components/badge-menu";
 import { ReminderItem } from "@/components/reminder-item";
 import {
   agentDisplay,
@@ -13,17 +13,17 @@ import {
   optionLabel,
   textOrEmpty,
 } from "@/lib/client-display";
-import { DEFAULT_PRIORITY, LANGUAGE_OPTIONS, SEX_OPTIONS } from "@/lib/client-form";
+import {
+  DEFAULT_PRIORITY,
+  LANGUAGE_OPTIONS,
+  PRIORITY_OPTIONS,
+  priorityBadgeClass,
+  SEX_OPTIONS,
+} from "@/lib/client-form";
+import { SALE_STATUS_OPTIONS, saleStatusBadgeClass } from "@/lib/sale-status";
 import { clientPageContext } from "@/lib/client-nav";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
-
-const SALE_STATUS_LABEL: Record<string, string> = {
-  interesado: "Interesado",
-  presupuesto: "Presupuesto enviado",
-  cerrado: "Cerrado",
-  perdido: "Perdido",
-};
 
 const CHANNEL_LABEL: Record<string, string> = {
   llamada: "Llamada",
@@ -35,13 +35,12 @@ const CHANNEL_LABEL: Record<string, string> = {
 
 // /clientes/[id] — P3, ficha de cliente. Muestra los datos del alta (ARC-10/
 // ARC-9), los datos ampliados (ARC-50: DNI, nacimiento, dirección, agente…;
-// vacíos con guion, como teléfono y correo), la prioridad con cambio rápido
-// (ARC-33) y una lista mínima de recordatorios pendientes
-// (ARC-60, alta con asignación; ARC-61, editar y eliminar). La sección
-// completa de F5 (vencidos destacados, marcar como hecho) es ARC-16; el resto
-// de funciones de la ficha (F3, F4, F7, F8, F10 — historial, siniestros,
-// pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-18, ARC-19, ARC-21,
-// ARC-52, ARC-56.
+// vacíos con guion, como teléfono y correo), la prioridad y el estado de venta
+// con cambio rápido (ARC-33; F7/ARC-18) y una lista mínima de recordatorios
+// pendientes (ARC-60, alta con asignación; ARC-61, editar y eliminar). La
+// sección completa de F5 (vencidos destacados, marcar como hecho) es ARC-16; el
+// resto de funciones de la ficha (F3, F4, F8, F10 — historial, siniestros,
+// pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-19, ARC-21, ARC-52, ARC-56.
 //
 // `?from=` dice desde dónde se abrió (regla de navegación ARC-8: «volver» lleva
 // al origen) y, desde P1 con un cliente elegido en el filtro, `?vista=recordatorios`
@@ -64,7 +63,8 @@ export default function Page({
   });
   const removeReminder = useMutation(api.reminders.remove);
   const setPriority = useMutation(api.clients.setPriority);
-  const [priorityError, setPriorityError] = useState<string | null>(null);
+  const setSaleStatus = useMutation(api.clients.setSaleStatus);
+  const [badgeError, setBadgeError] = useState<string | null>(null);
   const users = useQuery(api.users.list);
   const userNameById = new Map((users ?? []).map((u) => [u._id, u.name]));
 
@@ -144,16 +144,28 @@ export default function Page({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {/* Prioridad con cambio rápido (ARC-33). */}
-          <PriorityBadge
+          <BadgeMenu
+            name="Prioridad"
             // Salvaguarda ante un documento escrito a mano sin prioridad (como
             // `clientToForm` en P4); el esquema la declara obligatoria.
-            priority={client.priority ?? DEFAULT_PRIORITY}
+            value={client.priority ?? DEFAULT_PRIORITY}
+            options={PRIORITY_OPTIONS}
+            badgeClass={priorityBadgeClass}
             onChange={(priority) => setPriority({ id: clientId, priority })}
-            onError={setPriorityError}
+            onError={setBadgeError}
+            saveErrorMessage="No se ha podido cambiar la prioridad. Inténtalo de nuevo."
           />
-          <span className="rounded-pill bg-sale-interesado-bg text-sale-interesado-fg px-3 py-1 text-xs font-medium">
-            {SALE_STATUS_LABEL[client.saleStatus]}
-          </span>
+          {/* Estado de venta con cambio rápido (F7/ARC-18), con el color de
+              cada estado (ARC-77). Cualquier estado a cualquier otro. */}
+          <BadgeMenu
+            name="Estado de venta"
+            value={client.saleStatus}
+            options={SALE_STATUS_OPTIONS}
+            badgeClass={saleStatusBadgeClass}
+            onChange={(saleStatus) => setSaleStatus({ id: clientId, saleStatus })}
+            onError={setBadgeError}
+            saveErrorMessage="No se ha podido cambiar el estado de venta. Inténtalo de nuevo."
+          />
           {/* P4 Editar (ARC-11): único punto de entrada a la edición. */}
           <Link
             href={`/clientes/${clientId}/editar`}
@@ -163,9 +175,10 @@ export default function Page({
           </Link>
         </div>
       </div>
-      {/* Siempre presente (vacía si no hay error) para que el aviso se anuncie. */}
+      {/* Errores de los dos badges. Siempre presente (vacía si no hay error)
+          para que el aviso se anuncie. */}
       <div role="alert" className="text-warning-fg mb-4 text-sm empty:hidden">
-        {priorityError}
+        {badgeError}
       </div>
 
       <dl className="flex flex-col gap-3 text-sm">

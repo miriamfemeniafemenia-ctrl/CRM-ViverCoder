@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { addressValidator } from "./lib/addressFields";
 import { priorityValidator } from "./lib/priority";
+import { saleStatusValidator } from "./lib/saleStatus";
 import { v } from "convex/values";
 
 /**
@@ -79,12 +80,8 @@ export default defineSchema({
       v.literal("redes"),
       v.literal("presencial"),
     ),
-    saleStatus: v.union(
-      v.literal("interesado"),
-      v.literal("presupuesto"),
-      v.literal("cerrado"),
-      v.literal("perdido"),
-    ),
+    // Contrato único en lib/saleStatus.ts (ARC-18).
+    saleStatus: saleStatusValidator,
     // Contrato único en lib/priority.ts (ARC-32).
     priority: priorityValidator,
     dni: v.optional(v.string()),

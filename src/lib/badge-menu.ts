@@ -1,28 +1,12 @@
-import type { Priority } from "../types";
-import { PRIORITY_OPTIONS } from "./client-form";
+// Lógica pura del badge con menú de la ficha P3 (`BadgeMenu`): prioridad
+// (ARC-33) y estado de venta (ARC-18). El componente
+// (src/components/badge-menu.tsx) solo conecta eventos y foco.
 
-// Lógica pura del badge de prioridad de P3 (ARC-33). El componente
-// (src/components/priority-badge.tsx) solo conecta eventos y foco.
-
-// Clases literales (Tailwind solo genera las que ve escritas en el código).
-const BADGE_CLASS: Record<Priority, string> = {
-  alta: "bg-priority-alta-bg text-priority-alta-fg",
-  media: "bg-priority-media-bg text-priority-media-fg",
-  baja: "bg-priority-baja-bg text-priority-baja-fg",
-};
-
-export function priorityBadgeClass(priority: Priority): string {
-  return BADGE_CLASS[priority];
-}
-
-export function priorityLabel(priority: Priority): string {
-  return PRIORITY_OPTIONS.find((o) => o.value === priority)?.label ?? priority;
-}
-
-export function priorityAriaLabel(priority: Priority, saving: boolean): string {
+// Texto accesible del badge: «Prioridad: Alta. Cambiar prioridad».
+export function badgeAriaLabel(name: string, label: string, saving: boolean): string {
   return saving
-    ? `Prioridad: ${priorityLabel(priority)}, guardando…`
-    : `Prioridad: ${priorityLabel(priority)}. Cambiar prioridad`;
+    ? `${name}: ${label}, guardando…`
+    : `${name}: ${label}. Cambiar ${name.toLowerCase()}`;
 }
 
 // Navegación con teclado dentro del menú: flechas circulares, Inicio y Fin.
@@ -50,10 +34,10 @@ export function createSaveGuard() {
   let busy = false;
   return {
     isBusy: () => busy,
-    run(fn: () => Promise<unknown>): false | Promise<unknown> {
+    run<R>(fn: () => Promise<R>): false | Promise<R> {
       if (busy) return false;
       busy = true;
-      let pending: Promise<unknown>;
+      let pending: Promise<R>;
       try {
         pending = fn();
       } catch (err) {

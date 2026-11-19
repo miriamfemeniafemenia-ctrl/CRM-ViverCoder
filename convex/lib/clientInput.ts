@@ -260,6 +260,37 @@ export async function assertClientReferences(
   }
 }
 
+export type SaleStatus = Doc<"clients">["saleStatus"];
+
+export type SaleStatusResult = {
+  changed: boolean;
+  previousSaleStatus: SaleStatus;
+  saleStatus: SaleStatus;
+};
+
+// Cambio de estado de venta (F7/ARC-18), compartido por `clients.setSaleStatus`
+// y, en la PR 2, `contacts.create`. `client` es el documento leído DENTRO de la
+// mutation, así que `previousSaleStatus` es el valor real en el momento
+// serializado del cambio (no el que el navegador tenía en pantalla). Mismo
+// valor → no escribe ni sube la versión. Si cambia, la versión SÍ sube: un P4
+// «Editar» abierto recibe el aviso de edición simultánea.
+export async function applySaleStatus(
+  ctx: MutationCtx,
+  client: Doc<"clients">,
+  saleStatus: SaleStatus,
+): Promise<SaleStatusResult> {
+  const previousSaleStatus = client.saleStatus;
+  if (previousSaleStatus === saleStatus) {
+    return { changed: false, previousSaleStatus, saleStatus };
+  }
+  const currentVersion = client.updatedAt ?? client.createdAt;
+  await ctx.db.patch(client._id, {
+    saleStatus,
+    updatedAt: Math.max(Date.now(), currentVersion + 1),
+  });
+  return { changed: true, previousSaleStatus, saleStatus };
+}
+
 // Alta de cliente (P4 y alta rápida de «Anotar interacción»). Inicializa
 // siempre `updatedAt = createdAt`: todos los clientes nuevos tienen la misma
 // semántica de versión (control de ediciones simultáneas de `clients.update`).

@@ -1,12 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { priorityValidator } from "../../convex/lib/priority";
-import {
-  createSaveGuard,
-  nextIndex,
-  priorityAriaLabel,
-  priorityBadgeClass,
-  priorityLabel,
-} from "./priority-menu";
+import { badgeAriaLabel, createSaveGuard, nextIndex } from "./badge-menu";
 
 describe("nextIndex", () => {
   test("flechas circulares, Inicio y Fin", () => {
@@ -16,6 +9,9 @@ describe("nextIndex", () => {
     expect(nextIndex(2, "ArrowUp", 3)).toBe(1);
     expect(nextIndex(1, "Home", 3)).toBe(0);
     expect(nextIndex(1, "End", 3)).toBe(2);
+    // Con 4 opciones (estado de venta) también es circular.
+    expect(nextIndex(3, "ArrowDown", 4)).toBe(0);
+    expect(nextIndex(0, "ArrowUp", 4)).toBe(3);
   });
 
   test("otras teclas o lista vacía no mueven el foco", () => {
@@ -25,21 +21,18 @@ describe("nextIndex", () => {
   });
 });
 
-describe("badge de prioridad", () => {
-  const serverValues = priorityValidator.members.map((m) => m.value);
-
-  test("cada valor del servidor tiene clase de color y etiqueta propias", () => {
-    for (const p of serverValues) {
-      expect(priorityBadgeClass(p)).toContain(`bg-priority-${p}-bg`);
-      expect(priorityBadgeClass(p)).toContain(`text-priority-${p}-fg`);
-      expect(priorityLabel(p)).not.toBe(p);
-    }
-    expect(new Set(serverValues.map(priorityLabel)).size).toBe(serverValues.length);
-  });
-
-  test("texto accesible con y sin guardado", () => {
-    expect(priorityAriaLabel("alta", false)).toBe("Prioridad: Alta. Cambiar prioridad");
-    expect(priorityAriaLabel("baja", true)).toBe("Prioridad: Baja, guardando…");
+describe("badgeAriaLabel", () => {
+  test("con y sin guardado, para prioridad y estado de venta", () => {
+    expect(badgeAriaLabel("Prioridad", "Alta", false)).toBe(
+      "Prioridad: Alta. Cambiar prioridad",
+    );
+    expect(badgeAriaLabel("Prioridad", "Baja", true)).toBe("Prioridad: Baja, guardando…");
+    expect(badgeAriaLabel("Estado de venta", "Interesado", false)).toBe(
+      "Estado de venta: Interesado. Cambiar estado de venta",
+    );
+    expect(badgeAriaLabel("Estado de venta", "Cerrado", true)).toBe(
+      "Estado de venta: Cerrado, guardando…",
+    );
   });
 });
 
@@ -77,6 +70,11 @@ describe("createSaveGuard", () => {
       calls++;
     });
     expect(calls).toBe(2);
+  });
+
+  test("devuelve el resultado de la función (lo usa el aviso de venta cerrada)", async () => {
+    const guard = createSaveGuard();
+    expect(await guard.run(async () => ({ changed: true }))).toEqual({ changed: true });
   });
 
   test("si la primera falla, el bloqueo se libera igualmente", async () => {

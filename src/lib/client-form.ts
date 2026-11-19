@@ -234,6 +234,18 @@ export const PRIORITY_OPTIONS: readonly { value: Priority; label: string }[] = [
 ];
 export const DEFAULT_PRIORITY: Priority = "media";
 
+// Colores del badge de prioridad de P3 (ARC-33). Clases literales: Tailwind
+// solo genera las que ve escritas en el código.
+const PRIORITY_BADGE_CLASS: Record<Priority, string> = {
+  alta: "bg-priority-alta-bg text-priority-alta-fg",
+  media: "bg-priority-media-bg text-priority-media-fg",
+  baja: "bg-priority-baja-bg text-priority-baja-fg",
+};
+
+export function priorityBadgeClass(priority: Priority): string {
+  return PRIORITY_BADGE_CLASS[priority];
+}
+
 export type ClientFormFields = {
   name: string;
   phone: string;

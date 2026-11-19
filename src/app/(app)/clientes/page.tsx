@@ -3,23 +3,11 @@
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
+import { saleStatusBadgeClass, saleStatusLabel } from "@/lib/sale-status";
 import { api } from "../../../../convex/_generated/api";
 
-const SALE_STATUS_LABEL: Record<string, string> = {
-  interesado: "Interesado",
-  presupuesto: "Presupuesto enviado",
-  cerrado: "Cerrado",
-  perdido: "Perdido",
-};
-
-const SALE_STATUS_CLASS: Record<string, string> = {
-  interesado: "bg-sale-interesado-bg text-sale-interesado-fg",
-  presupuesto: "bg-sale-presupuesto-bg text-sale-presupuesto-fg",
-  cerrado: "bg-sale-cerrado-bg text-sale-cerrado-fg",
-  perdido: "bg-sale-perdido-bg text-sale-perdido-fg",
-};
-
-// /clientes — P2, lista de clientes con buscador (ARC-9/F2).
+// /clientes — P2, lista de clientes con buscador (ARC-9/F2). El estado de venta
+// sale de src/lib/sale-status.ts, compartido con la ficha P3 (ARC-77).
 export default function Page() {
   const [search, setSearch] = useState("");
   const clients = useQuery(api.clients.list, { search });
@@ -76,9 +64,9 @@ export default function Page() {
               >
                 <span className="text-text-primary font-medium">{client.name}</span>
                 <span
-                  className={`rounded-pill px-3 py-1 text-xs font-medium ${SALE_STATUS_CLASS[client.saleStatus]}`}
+                  className={`rounded-pill px-3 py-1 text-xs font-medium ${saleStatusBadgeClass(client.saleStatus)}`}
                 >
-                  {SALE_STATUS_LABEL[client.saleStatus]}
+                  {saleStatusLabel(client.saleStatus)}
                 </span>
               </Link>
             </li>
