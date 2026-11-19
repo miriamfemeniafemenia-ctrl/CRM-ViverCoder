@@ -2,7 +2,7 @@
 
 import { ConvexError } from "convex/values";
 import { useEffect, useId, useRef, useState } from "react";
-import { createSaveGuard, badgeAriaLabel, nextIndex } from "@/lib/badge-menu";
+import { badgeAriaLabel, createSaveGuard, menuAlign, nextIndex } from "@/lib/badge-menu";
 import { KNOWN_SERVER_ERRORS } from "@/lib/client-form";
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -49,6 +49,7 @@ export function BadgeMenu<T extends string>({
   const [open, setOpen] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [align, setAlign] = useState<"start" | "end">("start");
   // Un único guard por montaje: si se recreara en cada render perdería la
   // exclusión mutua.
   const [guard] = useState(createSaveGuard);
@@ -76,6 +77,10 @@ export function BadgeMenu<T extends string>({
   function openMenu() {
     if (guard.isBusy()) return;
     onError(null);
+    // En móvil, un badge pegado a la derecha abre el menú hacia la izquierda
+    // para que no se salga de la pantalla.
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) setAlign(menuAlign(rect.left, document.documentElement.clientWidth));
     setFocusIndex(
       Math.max(
         0,
@@ -139,7 +144,7 @@ export function BadgeMenu<T extends string>({
           id={menuId}
           role="menu"
           aria-label={name}
-          className="border-border-default bg-surface-card absolute top-full left-0 z-50 mt-1 flex min-w-40 flex-col rounded-md border p-2 shadow-md"
+          className={`border-border-default bg-surface-card absolute top-full z-50 mt-1 flex max-w-[13rem] min-w-40 flex-col rounded-md border p-2 shadow-md ${align === "end" ? "right-0" : "left-0"}`}
         >
           {options.map((option, i) => {
             const checked = option.value === value;

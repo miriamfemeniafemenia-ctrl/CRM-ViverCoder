@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { badgeAriaLabel, createSaveGuard, nextIndex } from "./badge-menu";
+import { badgeAriaLabel, createSaveGuard, menuAlign, nextIndex } from "./badge-menu";
 
 describe("nextIndex", () => {
   test("flechas circulares, Inicio y Fin", () => {
@@ -94,5 +94,15 @@ describe("createSaveGuard", () => {
     }) as Promise<unknown>;
     await expect(p).rejects.toThrow("síncrono");
     expect(guard.isBusy()).toBe(false);
+  });
+});
+
+describe("menuAlign", () => {
+  test("se abre hacia la derecha si cabe; si no, alineado a la derecha del badge", () => {
+    expect(menuAlign(20, 343)).toBe("start");
+    expect(menuAlign(127, 343)).toBe("start"); // 127 + 208 = 335 = 343 − 8
+    expect(menuAlign(128, 343)).toBe("end");
+    expect(menuAlign(250, 343)).toBe("end");
+    expect(menuAlign(500, 1440)).toBe("start");
   });
 });

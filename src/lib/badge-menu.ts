@@ -50,3 +50,20 @@ export function createSaveGuard() {
     },
   };
 }
+
+// Ancho máximo que puede ocupar el menú (opción más larga: «Presupuesto
+// enviado» con su marca ✓). El menú lleva `max-w-[13rem]`, así que nunca pasa
+// de aquí.
+export const MENU_MAX_WIDTH_PX = 208;
+const VIEWPORT_MARGIN_PX = 8;
+
+// Hacia dónde se abre el menú: alineado con el borde izquierdo del badge si
+// cabe hasta el borde derecho de la pantalla; si no (badge pegado a la derecha
+// en un móvil), alineado con su borde derecho.
+export function menuAlign(
+  buttonLeft: number,
+  viewportWidth: number,
+  menuWidth: number = MENU_MAX_WIDTH_PX,
+): "start" | "end" {
+  return buttonLeft + menuWidth <= viewportWidth - VIEWPORT_MARGIN_PX ? "start" : "end";
+}

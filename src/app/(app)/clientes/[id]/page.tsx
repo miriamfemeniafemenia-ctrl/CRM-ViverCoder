@@ -142,7 +142,9 @@ export default function Page({
             )}
           </p>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-3">
+        {/* Prioridad, estado y «Editar»: se parten en líneas si no caben (a
+            343 px, «Presupuesto enviado» no cabe con los otros dos). */}
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
           {/* Prioridad con cambio rápido (ARC-33). */}
           <BadgeMenu
             name="Prioridad"
