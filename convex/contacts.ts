@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation } from "./_generated/server";
-import { insertClient, newClientValidator } from "./lib/clientInput";
+import { applySaleStatus, insertClient, newClientValidator } from "./lib/clientInput";
+import { saleStatusValidator } from "./lib/saleStatus";
 import { requireTeamUser } from "./lib/team";
 import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 
@@ -20,6 +21,10 @@ import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 // - Si el cliente no existe se da de alta en la misma mutation (`newClient`):
 //   Convex revierte la transacción entera si algo falla después, así que no
 //   queda un cliente huérfano.
+// - `saleStatus` (opcional, F7/ARC-18): cambia el estado de venta del cliente
+//   (existente o recién dado de alta) en la misma transacción, con
+//   `applySaleStatus` (mismo valor → no escribe). Sin aviso de venta cerrada
+//   aquí: la propia nota es la constancia (ARC-19, «opción A»).
 // - Visibilidad total entre las 3 cuentas fijas (cartera compartida): guard
 //   `requireTeamUser` de convex/lib/team.ts.
 
@@ -44,6 +49,8 @@ export const create = mutation({
     date: v.string(),
     note: v.string(),
     performedById: v.id("users"),
+    // Opcional (F7/ARC-18): sin valor, el estado de venta no se toca.
+    saleStatus: v.optional(saleStatusValidator),
   },
   returns: v.object({ contactId: v.id("contacts"), clientId: v.id("clients") }),
   handler: async (ctx, args) => {
@@ -53,7 +60,9 @@ export const create = mutation({
       throw userError("La nota es obligatoria");
     }
     if (note.length > NOTE_MAX_LENGTH) {
-      throw userError(`La nota es demasiado larga (máximo ${NOTE_MAX_LENGTH} caracteres).`);
+      throw userError(
+        `La nota es demasiado larga (máximo ${NOTE_MAX_LENGTH} caracteres).`,
+      );
     }
     if (!isValidISODate(args.date)) {
       throw userError("La fecha no es válida");
@@ -63,15 +72,20 @@ export const create = mutation({
     if (!(await ctx.db.get(args.performedById))) {
       throw userError("El usuario que realizó la interacción no existe");
     }
-    let clientId;
+    let client;
     if ("clientId" in args.target) {
-      if (!(await ctx.db.get(args.target.clientId))) {
+      client = await ctx.db.get(args.target.clientId);
+      if (!client) {
         throw userError("El cliente no existe");
       }
-      clientId = args.target.clientId;
     } else {
-      clientId = await insertClient(ctx, args.target.newClient);
+      const newId = await insertClient(ctx, args.target.newClient);
+      client = await ctx.db.get(newId);
+      if (!client) {
+        throw new Error("El cliente recién creado no se encuentra");
+      }
     }
+    const clientId = client._id;
     const contactId = await ctx.db.insert("contacts", {
       clientId,
       type: args.type,
@@ -81,6 +95,12 @@ export const create = mutation({
       createdById: user._id,
       createdAt: Date.now(),
     });
+    // Cambio opcional del estado de venta (F7/ARC-18) en la misma transacción:
+    // si algo fallara, no quedaría ni la interacción ni el cambio. El resultado
+    // se ignora: aquí no hay aviso de venta cerrada (ARC-19, «opción A»).
+    if (args.saleStatus !== undefined) {
+      await applySaleStatus(ctx, client, args.saleStatus);
+    }
     return { contactId, clientId };
   },
 });

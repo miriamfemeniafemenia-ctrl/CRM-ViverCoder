@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 import { ContactForm } from "@/components/contact-form";
+import { parseMotivo } from "@/lib/contact-form";
 import { api } from "../../../../../convex/_generated/api";
 
 // Origen desde el que se abrió la ventana (regla de navegación ARC-8: "volver"
@@ -19,9 +20,16 @@ const DEFAULT_BACK_DESTINATION = "/clientes";
 export default function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ clientId?: string | string[]; from?: string | string[] }>;
+  searchParams: Promise<{
+    clientId?: string | string[];
+    from?: string | string[];
+    motivo?: string | string[];
+  }>;
 }) {
-  const { clientId: rawClientId, from: rawFrom } = use(searchParams);
+  const { clientId: rawClientId, from: rawFrom, motivo: rawMotivo } = use(searchParams);
+  // `?motivo=venta-cerrada` llega del aviso de P3 (ARC-19): solo cambia la pista
+  // de la nota. Cualquier otro valor (o repetido) se ignora.
+  const motivo = parseMotivo(rawMotivo);
   const router = useRouter();
   const createContact = useMutation(api.contacts.create);
 
@@ -36,17 +44,21 @@ export default function Page({
 
   // Solo la ficha de un cliente existente es un origen válido para "volver".
   const fromClientId = typeof rawFrom === "string" ? rawFrom : undefined;
-  const backHref = lookedUp && fromClientId === lookedUp._id
-    ? `/clientes/${lookedUp._id}`
-    : DEFAULT_BACK_DESTINATION;
+  const backHref =
+    lookedUp && fromClientId === lookedUp._id
+      ? `/clientes/${lookedUp._id}`
+      : DEFAULT_BACK_DESTINATION;
 
   const waitingForClient = clientIdParam !== undefined && lookedUp === undefined;
-  const clientNotFound = clientIdInvalid || (clientIdParam !== undefined && lookedUp === null);
+  const clientNotFound =
+    clientIdInvalid || (clientIdParam !== undefined && lookedUp === null);
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center p-6">
       <div className="w-full max-w-lg">
-        <h1 className="text-text-primary mb-6 text-2xl font-semibold">Anotar interacción</h1>
+        <h1 className="text-text-primary mb-6 text-2xl font-semibold">
+          Anotar interacción
+        </h1>
 
         {clientNotFound && (
           <div className="border-warning-border bg-warning-bg mb-4 flex flex-col gap-1 rounded-md border px-4 py-3">
@@ -68,9 +80,15 @@ export default function Page({
             key={lookedUp?._id ?? "sin-cliente"}
             initialClient={
               lookedUp
-                ? { _id: lookedUp._id, name: lookedUp.name, phone: lookedUp.phone }
+                ? {
+                    _id: lookedUp._id,
+                    name: lookedUp.name,
+                    phone: lookedUp.phone,
+                    saleStatus: lookedUp.saleStatus,
+                  }
                 : undefined
             }
+            motivo={motivo}
             onSubmit={async (values) => {
               const { clientId } = await createContact(values);
               router.push(`/clientes/${clientId}`);

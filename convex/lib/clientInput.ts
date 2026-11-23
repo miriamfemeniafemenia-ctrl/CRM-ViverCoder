@@ -76,7 +76,8 @@ export const CLIENT_ERRORS = {
   contactRequired: "Introduce al menos un teléfono o un correo electrónico",
   phone: "El teléfono no tiene un formato válido (9 dígitos, prefijo +34 opcional).",
   email: "El correo electrónico no tiene un formato válido.",
-  secondPhone: "El segundo teléfono no tiene un formato válido (9 dígitos, prefijo +34 opcional).",
+  secondPhone:
+    "El segundo teléfono no tiene un formato válido (9 dígitos, prefijo +34 opcional).",
   whatsapp: "El WhatsApp no tiene un formato válido (9 dígitos, prefijo +34 opcional).",
   dni: "El DNI/NIE no es válido.",
   dniDuplicate: "Ya existe un cliente con este DNI/NIE",
@@ -133,9 +134,7 @@ function optionalText(raw: string | undefined): string | undefined {
   return value;
 }
 
-function normalizeAddress(
-  raw: ClientFieldsInput["address"],
-): Doc<"clients">["address"] {
+function normalizeAddress(raw: ClientFieldsInput["address"]): Doc<"clients">["address"] {
   if (!raw) return undefined;
   const rawPostalCode = raw.postalCode?.trim();
   let postalCode: string | undefined;
@@ -208,7 +207,9 @@ export function normalizeClientFields(input: ClientFieldsInput | NewClientInput)
   const birthDate = details.birthDate?.trim() || undefined;
   if (
     birthDate &&
-    (!isValidISODate(birthDate) || birthDate < "1900-01-01" || birthDate > todayISODateMadrid())
+    (!isValidISODate(birthDate) ||
+      birthDate < "1900-01-01" ||
+      birthDate > todayISODateMadrid())
   ) {
     throw new ConvexError(CLIENT_ERRORS.birthDate);
   }
@@ -269,7 +270,7 @@ export type SaleStatusResult = {
 };
 
 // Cambio de estado de venta (F7/ARC-18), compartido por `clients.setSaleStatus`
-// y, en la PR 2, `contacts.create`. `client` es el documento leído DENTRO de la
+// y `contacts.create` («Anotar interacción»). `client` es el documento leído DENTRO de la
 // mutation, así que `previousSaleStatus` es el valor real en el momento
 // serializado del cambio (no el que el navegador tenía en pantalla). Mismo
 // valor → no escribe ni sube la versión. Si cambia, la versión SÍ sube: un P4
