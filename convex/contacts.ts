@@ -60,7 +60,9 @@ export const create = mutation({
       throw userError("La nota es obligatoria");
     }
     if (note.length > NOTE_MAX_LENGTH) {
-      throw userError(`La nota es demasiado larga (máximo ${NOTE_MAX_LENGTH} caracteres).`);
+      throw userError(
+        `La nota es demasiado larga (máximo ${NOTE_MAX_LENGTH} caracteres).`,
+      );
     }
     if (!isValidISODate(args.date)) {
       throw userError("La fecha no es válida");

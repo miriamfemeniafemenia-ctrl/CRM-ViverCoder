@@ -130,7 +130,10 @@ export function ContactForm({
   const isSearching = client === null && !creatingClient;
   useEffect(() => {
     if (!isSearching) return;
-    const timer = setTimeout(() => setDebouncedTerm(searchText.trim()), SEARCH_DEBOUNCE_MS);
+    const timer = setTimeout(
+      () => setDebouncedTerm(searchText.trim()),
+      SEARCH_DEBOUNCE_MS,
+    );
     return () => clearTimeout(timer);
   }, [searchText, isSearching]);
 
@@ -230,7 +233,10 @@ export function ContactForm({
       });
     } catch (err) {
       setError(
-        contactErrorMessage(err, "No se ha podido guardar la interacción. Inténtalo de nuevo."),
+        contactErrorMessage(
+          err,
+          "No se ha podido guardar la interacción. Inténtalo de nuevo.",
+        ),
       );
       setIsSaving(false);
     }
@@ -271,11 +277,12 @@ export function ContactForm({
               placeholder="Buscar por nombre, teléfono o correo"
               className={fieldClass}
             />
-            {searchText.trim().length > 0 && searchText.trim().length < SEARCH_MIN_CHARS && (
-              <p className="text-text-tertiary text-sm">
-                Escribe al menos {SEARCH_MIN_CHARS} caracteres.
-              </p>
-            )}
+            {searchText.trim().length > 0 &&
+              searchText.trim().length < SEARCH_MIN_CHARS && (
+                <p className="text-text-tertiary text-sm">
+                  Escribe al menos {SEARCH_MIN_CHARS} caracteres.
+                </p>
+              )}
             {suggestions && suggestions.length === 0 && (
               <p className="text-text-secondary text-sm">
                 No se encontró ningún cliente con ese dato.
@@ -295,7 +302,7 @@ export function ContactForm({
                           saleStatus: s.saleStatus,
                         })
                       }
-                      className="hover:bg-neutral-100 flex w-full flex-col px-3 py-2 text-left"
+                      className="flex w-full flex-col px-3 py-2 text-left hover:bg-neutral-100"
                     >
                       <span className="text-text-primary font-medium">{s.name}</span>
                       {s.phone && (
@@ -319,7 +326,9 @@ export function ContactForm({
         {creatingClient && (
           <div className="border-border-default flex flex-col gap-3 rounded-md border p-3">
             <label className="flex flex-col gap-1">
-              <span className="text-text-secondary text-sm font-medium">Nombre completo</span>
+              <span className="text-text-secondary text-sm font-medium">
+                Nombre completo
+              </span>
               <input
                 value={newName}
                 onChange={(event) => setNewName(event.target.value)}
@@ -336,7 +345,9 @@ export function ContactForm({
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-text-secondary text-sm font-medium">Correo electrónico</span>
+              <span className="text-text-secondary text-sm font-medium">
+                Correo electrónico
+              </span>
               <input
                 type="email"
                 value={newEmail}

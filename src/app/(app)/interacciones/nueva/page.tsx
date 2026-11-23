@@ -44,17 +44,21 @@ export default function Page({
 
   // Solo la ficha de un cliente existente es un origen válido para "volver".
   const fromClientId = typeof rawFrom === "string" ? rawFrom : undefined;
-  const backHref = lookedUp && fromClientId === lookedUp._id
-    ? `/clientes/${lookedUp._id}`
-    : DEFAULT_BACK_DESTINATION;
+  const backHref =
+    lookedUp && fromClientId === lookedUp._id
+      ? `/clientes/${lookedUp._id}`
+      : DEFAULT_BACK_DESTINATION;
 
   const waitingForClient = clientIdParam !== undefined && lookedUp === undefined;
-  const clientNotFound = clientIdInvalid || (clientIdParam !== undefined && lookedUp === null);
+  const clientNotFound =
+    clientIdInvalid || (clientIdParam !== undefined && lookedUp === null);
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center p-6">
       <div className="w-full max-w-lg">
-        <h1 className="text-text-primary mb-6 text-2xl font-semibold">Anotar interacción</h1>
+        <h1 className="text-text-primary mb-6 text-2xl font-semibold">
+          Anotar interacción
+        </h1>
 
         {clientNotFound && (
           <div className="border-warning-border bg-warning-bg mb-4 flex flex-col gap-1 rounded-md border px-4 py-3">

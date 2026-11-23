@@ -28,7 +28,8 @@ async function setup() {
     });
     return { miriam, antonio, clientId };
   });
-  const as = (userId: Id<"users">) => t.withIdentity({ subject: `${userId}|sesion-test` });
+  const as = (userId: Id<"users">) =>
+    t.withIdentity({ subject: `${userId}|sesion-test` });
   return { t, as, ...base };
 }
 type Ctx = Awaited<ReturnType<typeof setup>>;
@@ -86,7 +87,11 @@ describe("contacts.create", () => {
       ...valid(s),
       type: "correo", // canal de la interacción: solo existe en contacts
       target: {
-        newClient: { name: "  Nuevo Cliente ", email: "nuevo@test.es", channel: "presencial" }, // solo en clients
+        newClient: {
+          name: "  Nuevo Cliente ",
+          email: "nuevo@test.es",
+          channel: "presencial",
+        }, // solo en clients
       },
     });
     expect(clientId).not.toBe(s.clientId);
@@ -114,7 +119,9 @@ describe("contacts.create", () => {
       s.as(s.miriam).mutation(api.contacts.create, {
         ...valid(s),
         note: "   ",
-        target: { newClient: { name: "Huérfano", phone: "600123457", channel: "llamada" } },
+        target: {
+          newClient: { name: "Huérfano", phone: "600123457", channel: "llamada" },
+        },
       }),
     );
     expect(msg).toBe("La nota es obligatoria");
@@ -137,7 +144,11 @@ describe("contacts.create", () => {
   test("alta inline con quien realizó inexistente: nada se escribe (ni el cliente)", async () => {
     const s = await setup();
     const ghost = await s.t.run(async (ctx) => {
-      const id = await ctx.db.insert("users", { name: "X", email: "x@test.es", role: "agent" });
+      const id = await ctx.db.insert("users", {
+        name: "X",
+        email: "x@test.es",
+        role: "agent",
+      });
       await ctx.db.delete(id);
       return id;
     });
@@ -146,7 +157,9 @@ describe("contacts.create", () => {
       s.as(s.miriam).mutation(api.contacts.create, {
         ...valid(s),
         performedById: ghost,
-        target: { newClient: { name: "Huérfano", phone: "600123457", channel: "llamada" } },
+        target: {
+          newClient: { name: "Huérfano", phone: "600123457", channel: "llamada" },
+        },
       }),
     );
     expect(msg).toBe("El usuario que realizó la interacción no existe");
@@ -182,13 +195,19 @@ describe("contacts.create", () => {
         await ctx.db.delete(id);
         return id;
       });
-      expect(await reject(s, { target: { clientId: gone } })).toBe("El cliente no existe");
+      expect(await reject(s, { target: { clientId: gone } })).toBe(
+        "El cliente no existe",
+      );
     });
 
     test("quien realizó inexistente", async () => {
       const s = await setup();
       const ghost = await s.t.run(async (ctx) => {
-        const id = await ctx.db.insert("users", { name: "X", email: "x@test.es", role: "agent" });
+        const id = await ctx.db.insert("users", {
+          name: "X",
+          email: "x@test.es",
+          role: "agent",
+        });
         await ctx.db.delete(id);
         return id;
       });
@@ -197,14 +216,17 @@ describe("contacts.create", () => {
       );
     });
 
-    test.each(["presencial", "fax", ""])("canal de interacción inválido (%s) lo rechaza el validador", async (type) => {
-      const s = await setup();
-      const before = await counts(s);
-      await expect(
-        s.as(s.miriam).mutation(api.contacts.create, { ...valid(s), type } as never),
-      ).rejects.toThrow();
-      expect(await counts(s)).toEqual(before);
-    });
+    test.each(["presencial", "fax", ""])(
+      "canal de interacción inválido (%s) lo rechaza el validador",
+      async (type) => {
+        const s = await setup();
+        const before = await counts(s);
+        await expect(
+          s.as(s.miriam).mutation(api.contacts.create, { ...valid(s), type } as never),
+        ).rejects.toThrow();
+        expect(await counts(s)).toEqual(before);
+      },
+    );
 
     test.each([
       "2000-01-01", // pasada: aceptada
@@ -212,7 +234,9 @@ describe("contacts.create", () => {
       "2024-02-29", // bisiesto válido
     ])("fecha válida (%s) aceptada, sin restricción respecto a hoy", async (date) => {
       const s = await setup();
-      const { contactId } = await s.as(s.miriam).mutation(api.contacts.create, { ...valid(s), date });
+      const { contactId } = await s
+        .as(s.miriam)
+        .mutation(api.contacts.create, { ...valid(s), date });
       expect((await s.t.run((ctx) => ctx.db.get(contactId)))!.date).toBe(date);
     });
 
@@ -234,7 +258,9 @@ describe("contacts.create", () => {
   test("no autenticado: se rechaza y no se escribe nada", async () => {
     const s = await setup();
     const before = await counts(s);
-    await expect(s.t.mutation(api.contacts.create, valid(s))).rejects.toThrow("No autenticado");
+    await expect(s.t.mutation(api.contacts.create, valid(s))).rejects.toThrow(
+      "No autenticado",
+    );
     expect(await counts(s)).toEqual(before);
   });
 });
@@ -262,9 +288,11 @@ describe("contacts.create con saleStatus", () => {
     expect(after!.saleStatus).toBe("presupuesto");
     expect(after!.updatedAt).toBeGreaterThan(version);
     // El resto de campos queda igual.
-    expect({ ...after, saleStatus: before!.saleStatus, updatedAt: before!.updatedAt }).toEqual(
-      before,
-    );
+    expect({
+      ...after,
+      saleStatus: before!.saleStatus,
+      updatedAt: before!.updatedAt,
+    }).toEqual(before);
   });
 
   test("con el mismo estado, el cliente no se toca (ni la versión)", async () => {
@@ -304,7 +332,9 @@ describe("contacts.create con saleStatus", () => {
         }),
       ),
     ).toBe("La nota es obligatoria");
-    const ghost = await s.t.run((ctx) => ctx.db.insert("users", { name: "x", email: "x@t.es", role: "agent" }));
+    const ghost = await s.t.run((ctx) =>
+      ctx.db.insert("users", { name: "x", email: "x@t.es", role: "agent" }),
+    );
     await s.t.run((ctx) => ctx.db.delete(ghost));
     expect(
       await userMessage(
