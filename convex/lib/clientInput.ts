@@ -269,7 +269,7 @@ export type SaleStatusResult = {
 };
 
 // Cambio de estado de venta (F7/ARC-18), compartido por `clients.setSaleStatus`
-// y, en la PR 2, `contacts.create`. `client` es el documento leído DENTRO de la
+// y `contacts.create` («Anotar interacción»). `client` es el documento leído DENTRO de la
 // mutation, así que `previousSaleStatus` es el valor real en el momento
 // serializado del cambio (no el que el navegador tenía en pantalla). Mismo
 // valor → no escribe ni sube la versión. Si cambia, la versión SÍ sube: un P4

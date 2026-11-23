@@ -5,8 +5,15 @@ import { ConvexError } from "convex/values";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import {
+  type ContactMotivo,
+  keepSaleStatusLabel,
+  notePlaceholder,
+  saleStatusToSend,
+} from "@/lib/contact-form";
 import { NOTE_MAX_LENGTH, todayISODateMadrid } from "@/lib/reminders";
-import type { ClientChannel, ContactChannel } from "@/types";
+import { SALE_STATUS_OPTIONS } from "@/lib/sale-status";
+import type { ClientChannel, ContactChannel, SaleStatus } from "@/types";
 
 // Canal de la INTERACCIÓN (`contacts.type`). No confundir con el canal de
 // captación del cliente nuevo (`clients.channel`, `CLIENT_CHANNELS`): son
@@ -30,7 +37,12 @@ const CLIENT_CHANNELS: { value: ClientChannel; label: string }[] = [
 const SEARCH_MIN_CHARS = 2;
 const SEARCH_DEBOUNCE_MS = 250;
 
-export type PickedClient = { _id: Id<"clients">; name: string; phone?: string };
+export type PickedClient = {
+  _id: Id<"clients">;
+  name: string;
+  phone?: string;
+  saleStatus?: SaleStatus;
+};
 
 export type ContactFormValues = {
   target:
@@ -47,6 +59,8 @@ export type ContactFormValues = {
   date: string;
   note: string;
   performedById: Id<"users">;
+  // Solo si se eligió un estado (F7/ARC-18); sin él, el servidor no lo toca.
+  saleStatus?: SaleStatus;
 };
 
 // Errores de negocio: `ConvexError({ userMessage })` (contacts.create) o
@@ -67,13 +81,16 @@ const fieldClass =
   "border-border-default text-text-primary focus:border-primary-500 disabled:text-text-tertiary h-12 w-full rounded-md border px-3 outline-none disabled:bg-neutral-100";
 
 // Formulario de "Anotar interacción" (ARC-72). `initialClient` viene de
-// `?clientId=` ya resuelto por el backend (clients.lookup).
+// `?clientId=` ya resuelto por el backend (clients.lookup). `motivo` llega del
+// aviso «¡Venta cerrada!» de P3 (ARC-19) y solo cambia la pista de la nota.
 export function ContactForm({
   initialClient,
+  motivo,
   onSubmit,
   onCancel,
 }: {
   initialClient?: PickedClient;
+  motivo?: ContactMotivo;
   onSubmit: (values: ContactFormValues) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -92,6 +109,9 @@ export function ContactForm({
   const [type, setType] = useState<ContactChannel>("llamada");
   const [date, setDate] = useState(() => todayISODateMadrid());
   const [note, setNote] = useState("");
+  // Estado de venta opcional (F7/ARC-18). "" = «Sin cambios». Vuelve a "" al
+  // cambiar de cliente: una elección hecha para uno no se aplica al siguiente.
+  const [saleChoice, setSaleChoice] = useState<SaleStatus | "">("");
   // "" hasta que se elige otra persona: por defecto, quien tiene la sesión.
   const [performedByOverride, setPerformedByOverride] = useState<Id<"users"> | "">("");
   const candidatePerformedById = performedByOverride || currentUser?._id || "";
@@ -129,6 +149,7 @@ export function ContactForm({
 
   function pickClient(picked: PickedClient) {
     setClient(picked);
+    setSaleChoice("");
     setSearchText("");
     setDebouncedTerm("");
     setError(null);
@@ -137,6 +158,7 @@ export function ContactForm({
   function startCreatingClient() {
     setCreatingClient(true);
     setClient(null);
+    setSaleChoice("");
     setSearchText("");
     setDebouncedTerm("");
     setError(null);
@@ -145,6 +167,7 @@ export function ContactForm({
   function backToSearch() {
     setCreatingClient(false);
     setClient(null);
+    setSaleChoice("");
     setError(null);
   }
 
@@ -197,7 +220,14 @@ export function ContactForm({
 
     setIsSaving(true);
     try {
-      await onSubmit({ target, type, date, note: normalizedNote, performedById });
+      await onSubmit({
+        target,
+        type,
+        date,
+        note: normalizedNote,
+        performedById,
+        saleStatus: saleStatusToSend(saleChoice),
+      });
     } catch (err) {
       setError(
         contactErrorMessage(err, "No se ha podido guardar la interacción. Inténtalo de nuevo."),
@@ -257,7 +287,14 @@ export function ContactForm({
                   <li key={s._id}>
                     <button
                       type="button"
-                      onClick={() => pickClient({ _id: s._id, name: s.name, phone: s.phone })}
+                      onClick={() =>
+                        pickClient({
+                          _id: s._id,
+                          name: s.name,
+                          phone: s.phone,
+                          saleStatus: s.saleStatus,
+                        })
+                      }
                       className="hover:bg-neutral-100 flex w-full flex-col px-3 py-2 text-left"
                     >
                       <span className="text-text-primary font-medium">{s.name}</span>
@@ -380,11 +417,32 @@ export function ContactForm({
       </label>
 
       <label className="flex flex-col gap-1">
+        <span className="text-text-secondary text-sm font-medium">
+          Estado de venta (opcional)
+        </span>
+        <select
+          value={saleChoice}
+          onChange={(event) => setSaleChoice(event.target.value as SaleStatus | "")}
+          disabled={isSaving}
+          className={`bg-surface-card ${fieldClass}`}
+        >
+          <option value="">{keepSaleStatusLabel(client?.saleStatus)}</option>
+          {SALE_STATUS_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1">
         <span className="text-text-secondary text-sm font-medium">Nota</span>
+        {/* La pista es solo `placeholder` (ARC-19, «opción A»): nunca se
+            guarda, y una nota vacía sigue siendo un error. */}
         <textarea
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          placeholder="Ej.: Pidió presupuesto de hogar"
+          placeholder={notePlaceholder(saleChoice, motivo)}
           disabled={isSaving}
           rows={4}
           maxLength={NOTE_MAX_LENGTH}

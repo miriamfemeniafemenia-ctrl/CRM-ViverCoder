@@ -238,3 +238,113 @@ describe("contacts.create", () => {
     expect(await counts(s)).toEqual(before);
   });
 });
+
+// Cambio opcional del estado de venta al anotar la interacción (F7/ARC-18).
+describe("contacts.create con saleStatus", () => {
+  const getClient = (s: Ctx, id: Id<"clients">) => s.t.run((ctx) => ctx.db.get(id));
+
+  test("sin saleStatus, el estado y la versión del cliente no cambian", async () => {
+    const s = await setup();
+    const before = await getClient(s, s.clientId);
+    await s.as(s.miriam).mutation(api.contacts.create, valid(s));
+    expect(await getClient(s, s.clientId)).toEqual(before);
+  });
+
+  test("con un estado distinto, cambia el estado y sube la versión", async () => {
+    const s = await setup();
+    const before = await getClient(s, s.clientId);
+    const version = before!.updatedAt ?? before!.createdAt;
+    await s.as(s.miriam).mutation(api.contacts.create, {
+      ...valid(s),
+      saleStatus: "presupuesto",
+    });
+    const after = await getClient(s, s.clientId);
+    expect(after!.saleStatus).toBe("presupuesto");
+    expect(after!.updatedAt).toBeGreaterThan(version);
+    // El resto de campos queda igual.
+    expect({ ...after, saleStatus: before!.saleStatus, updatedAt: before!.updatedAt }).toEqual(
+      before,
+    );
+  });
+
+  test("con el mismo estado, el cliente no se toca (ni la versión)", async () => {
+    const s = await setup();
+    const before = await getClient(s, s.clientId);
+    await s.as(s.miriam).mutation(api.contacts.create, {
+      ...valid(s),
+      saleStatus: "interesado",
+    });
+    expect(await getClient(s, s.clientId)).toEqual(before);
+  });
+
+  test("alta inline con «presupuesto»: el cliente nace en ese estado y el contacto va ligado a él", async () => {
+    const s = await setup();
+    const { contactId, clientId } = await s.as(s.miriam).mutation(api.contacts.create, {
+      ...valid(s),
+      target: { newClient: { name: "Pedro Ruiz", phone: "611222333", channel: "web" } },
+      saleStatus: "presupuesto",
+    });
+    expect(clientId).not.toBe(s.clientId);
+    expect((await getClient(s, clientId))!.saleStatus).toBe("presupuesto");
+    const contact = await s.t.run((ctx) => ctx.db.get(contactId));
+    expect(contact!.clientId).toBe(clientId);
+  });
+
+  test("alta inline con validación fallida: ni cliente huérfano ni contacto", async () => {
+    const s = await setup();
+    const before = await counts(s);
+    const newClient = { name: "Pedro Ruiz", phone: "611222333", channel: "web" as const };
+    expect(
+      await userMessage(
+        s.as(s.miriam).mutation(api.contacts.create, {
+          ...valid(s),
+          target: { newClient },
+          note: "   ",
+          saleStatus: "cerrado",
+        }),
+      ),
+    ).toBe("La nota es obligatoria");
+    const ghost = await s.t.run((ctx) => ctx.db.insert("users", { name: "x", email: "x@t.es", role: "agent" }));
+    await s.t.run((ctx) => ctx.db.delete(ghost));
+    expect(
+      await userMessage(
+        s.as(s.miriam).mutation(api.contacts.create, {
+          ...valid(s),
+          target: { newClient },
+          performedById: ghost,
+          saleStatus: "cerrado",
+        }),
+      ),
+    ).toBe("El usuario que realizó la interacción no existe");
+    expect(await counts(s)).toEqual(before);
+  });
+
+  test("cliente existente con validación fallida: ni interacción ni cambio de estado", async () => {
+    const s = await setup();
+    const before = await counts(s);
+    const clientBefore = await getClient(s, s.clientId);
+    expect(
+      await userMessage(
+        s.as(s.miriam).mutation(api.contacts.create, {
+          ...valid(s),
+          note: "",
+          saleStatus: "cerrado",
+        }),
+      ),
+    ).toBe("La nota es obligatoria");
+    expect(await counts(s)).toEqual(before);
+    expect(await getClient(s, s.clientId)).toEqual(clientBefore);
+  });
+
+  test("un estado no válido se rechaza y no se escribe nada", async () => {
+    const s = await setup();
+    const before = await counts(s);
+    await expect(
+      s.as(s.miriam).mutation(api.contacts.create, {
+        ...valid(s),
+        saleStatus: "vendido" as never,
+      }),
+    ).rejects.toThrow();
+    expect(await counts(s)).toEqual(before);
+  });
+});

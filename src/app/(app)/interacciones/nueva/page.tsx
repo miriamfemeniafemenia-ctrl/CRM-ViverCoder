@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 import { ContactForm } from "@/components/contact-form";
+import { parseMotivo } from "@/lib/contact-form";
 import { api } from "../../../../../convex/_generated/api";
 
 // Origen desde el que se abrió la ventana (regla de navegación ARC-8: "volver"
@@ -19,9 +20,16 @@ const DEFAULT_BACK_DESTINATION = "/clientes";
 export default function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ clientId?: string | string[]; from?: string | string[] }>;
+  searchParams: Promise<{
+    clientId?: string | string[];
+    from?: string | string[];
+    motivo?: string | string[];
+  }>;
 }) {
-  const { clientId: rawClientId, from: rawFrom } = use(searchParams);
+  const { clientId: rawClientId, from: rawFrom, motivo: rawMotivo } = use(searchParams);
+  // `?motivo=venta-cerrada` llega del aviso de P3 (ARC-19): solo cambia la pista
+  // de la nota. Cualquier otro valor (o repetido) se ignora.
+  const motivo = parseMotivo(rawMotivo);
   const router = useRouter();
   const createContact = useMutation(api.contacts.create);
 
@@ -68,9 +76,15 @@ export default function Page({
             key={lookedUp?._id ?? "sin-cliente"}
             initialClient={
               lookedUp
-                ? { _id: lookedUp._id, name: lookedUp.name, phone: lookedUp.phone }
+                ? {
+                    _id: lookedUp._id,
+                    name: lookedUp.name,
+                    phone: lookedUp.phone,
+                    saleStatus: lookedUp.saleStatus,
+                  }
                 : undefined
             }
+            motivo={motivo}
             onSubmit={async (values) => {
               const { clientId } = await createContact(values);
               router.push(`/clientes/${clientId}`);

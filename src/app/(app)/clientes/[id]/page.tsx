@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { type ReactNode, use, useState } from "react";
 import { BadgeMenu } from "@/components/badge-menu";
+import { ClosedSaleDialog } from "@/components/closed-sale-dialog";
 import { ReminderItem } from "@/components/reminder-item";
 import {
   agentDisplay,
@@ -20,7 +21,11 @@ import {
   priorityBadgeClass,
   SEX_OPTIONS,
 } from "@/lib/client-form";
-import { SALE_STATUS_OPTIONS, saleStatusBadgeClass } from "@/lib/sale-status";
+import {
+  SALE_STATUS_OPTIONS,
+  saleStatusBadgeClass,
+  shouldShowClosedPrompt,
+} from "@/lib/sale-status";
 import { clientPageContext } from "@/lib/client-nav";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -36,11 +41,12 @@ const CHANNEL_LABEL: Record<string, string> = {
 // /clientes/[id] — P3, ficha de cliente. Muestra los datos del alta (ARC-10/
 // ARC-9), los datos ampliados (ARC-50: DNI, nacimiento, dirección, agente…;
 // vacíos con guion, como teléfono y correo), la prioridad y el estado de venta
-// con cambio rápido (ARC-33; F7/ARC-18) y una lista mínima de recordatorios
+// con cambio rápido (ARC-33; F7/ARC-18) — al pasar a «Cerrado», aviso de venta
+// cerrada (F8/ARC-19) — y una lista mínima de recordatorios
 // pendientes (ARC-60, alta con asignación; ARC-61, editar y eliminar). La
 // sección completa de F5 (vencidos destacados, marcar como hecho) es ARC-16; el
-// resto de funciones de la ficha (F3, F4, F8, F10 — historial, siniestros,
-// pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-19, ARC-21, ARC-52, ARC-56.
+// resto de funciones de la ficha (F3, F4, F10 — historial, siniestros,
+// pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-21, ARC-52, ARC-56.
 //
 // `?from=` dice desde dónde se abrió (regla de navegación ARC-8: «volver» lleva
 // al origen) y, desde P1 con un cliente elegido en el filtro, `?vista=recordatorios`
@@ -65,6 +71,7 @@ export default function Page({
   const setPriority = useMutation(api.clients.setPriority);
   const setSaleStatus = useMutation(api.clients.setSaleStatus);
   const [badgeError, setBadgeError] = useState<string | null>(null);
+  const [closedPromptOpen, setClosedPromptOpen] = useState(false);
   const users = useQuery(api.users.list);
   const userNameById = new Map((users ?? []).map((u) => [u._id, u.name]));
 
@@ -164,7 +171,12 @@ export default function Page({
             value={client.saleStatus}
             options={SALE_STATUS_OPTIONS}
             badgeClass={saleStatusBadgeClass}
-            onChange={(saleStatus) => setSaleStatus({ id: clientId, saleStatus })}
+            onChange={async (saleStatus) => {
+              const result = await setSaleStatus({ id: clientId, saleStatus });
+              // Aviso de venta cerrada (ARC-19): lo decide el resultado del
+              // servidor, nunca el valor que la ficha tenía en pantalla.
+              if (shouldShowClosedPrompt(result)) setClosedPromptOpen(true);
+            }}
             onError={setBadgeError}
             saveErrorMessage="No se ha podido cambiar el estado de venta. Inténtalo de nuevo."
           />
@@ -266,6 +278,12 @@ export default function Page({
           <div className="mt-4">{remindersCard}</div>
         </>
       )}
+
+      <ClosedSaleDialog
+        open={closedPromptOpen}
+        annotateHref={`/interacciones/nueva?clientId=${clientId}&from=${clientId}&motivo=venta-cerrada`}
+        onClose={() => setClosedPromptOpen(false)}
+      />
     </div>
   );
 }
