@@ -378,3 +378,106 @@ describe("contacts.create con saleStatus", () => {
     expect(await counts(s)).toEqual(before);
   });
 });
+
+describe("contacts.listByClient (ARC-14)", () => {
+  // Inserta directamente para fijar `createdAt` y comprobar el desempate.
+  const insert = (
+    s: Ctx,
+    over: Partial<{
+      clientId: Id<"clients">;
+      date: string;
+      createdAt: number;
+      note: string;
+      createdById: Id<"users">;
+    }>,
+  ) =>
+    s.t.run((ctx) =>
+      ctx.db.insert("contacts", {
+        clientId: over.clientId ?? s.clientId,
+        type: "llamada",
+        note: over.note ?? "nota",
+        date: over.date ?? "2026-11-01",
+        performedById: s.antonio,
+        createdById: over.createdById ?? s.antonio,
+        createdAt: over.createdAt ?? 1,
+      }),
+    );
+
+  test("la más reciente primero; con la misma fecha, la última anotada", async () => {
+    const s = await setup();
+    await insert(s, {
+      date: "2026-11-20",
+      createdAt: 100,
+      note: "B: 20 nov, anotada antes",
+    });
+    await insert(s, { date: "2026-10-05", createdAt: 300, note: "D: 5 oct" });
+    await insert(s, { date: "2026-11-23", createdAt: 50, note: "A: 23 nov" });
+    await insert(s, {
+      date: "2026-11-20",
+      createdAt: 200,
+      note: "B2: 20 nov, anotada después",
+    });
+    // Misma fecha y mismo createdAt: decide el orden de inserción (_creationTime).
+    await insert(s, { date: "2025-12-31", createdAt: 7, note: "E1: primera insertada" });
+    await insert(s, { date: "2025-12-31", createdAt: 7, note: "E2: segunda insertada" });
+
+    const list = await s
+      .as(s.miriam)
+      .query(api.contacts.listByClient, { clientId: s.clientId });
+
+    expect(list.map((c) => c.note)).toEqual([
+      "A: 23 nov",
+      "B2: 20 nov, anotada después",
+      "B: 20 nov, anotada antes",
+      "D: 5 oct",
+      "E2: segunda insertada",
+      "E1: primera insertada",
+    ]);
+  });
+
+  test("solo las de ese cliente, y solo los campos que pinta la ficha", async () => {
+    const s = await setup();
+    const otro = await s.t.run((ctx) =>
+      ctx.db.insert("clients", {
+        name: "Otro",
+        phone: "600000000",
+        channel: "web",
+        saleStatus: "interesado",
+        priority: "media",
+        createdAt: 0,
+      }),
+    );
+    const mine = await insert(s, { createdById: s.miriam, note: "de Laura" });
+    await insert(s, { clientId: otro, note: "de Otro" });
+
+    const list = await s
+      .as(s.antonio)
+      .query(api.contacts.listByClient, { clientId: s.clientId });
+
+    expect(list).toEqual([
+      {
+        _id: mine,
+        type: "llamada",
+        note: "de Laura",
+        date: "2026-11-01",
+        performedById: s.antonio,
+        createdById: s.miriam,
+      },
+    ]);
+  });
+
+  test("un cliente sin interacciones devuelve una lista vacía", async () => {
+    const s = await setup();
+    expect(
+      await s.as(s.miriam).query(api.contacts.listByClient, { clientId: s.clientId }),
+    ).toEqual([]);
+  });
+
+  test("sin sesión devuelve una lista vacía aunque haya datos", async () => {
+    const s = await setup();
+    await insert(s, {});
+    expect(await s.t.query(api.contacts.listByClient, { clientId: s.clientId })).toEqual(
+      [],
+    );
+  });
+});

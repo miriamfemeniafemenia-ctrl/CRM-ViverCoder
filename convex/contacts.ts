@@ -1,13 +1,13 @@
 import { ConvexError, v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { applySaleStatus, insertClient, newClientValidator } from "./lib/clientInput";
 import { saleStatusValidator } from "./lib/saleStatus";
-import { requireTeamUser } from "./lib/team";
+import { getTeamUser, requireTeamUser } from "./lib/team";
 import { isValidISODate, NOTE_MAX_LENGTH } from "./lib/validation";
 
 // D2 — Contacto. "Anotar interacción" (ARC-72): registrar qué pasó en una
 // llamada, WhatsApp, correo, redes o web con un cliente o posible cliente. El
-// historial en la ficha (ARC-14) queda fuera de este alcance.
+// historial de la ficha P3 (ARC-14) se lee con `listByClient`.
 //
 // Reglas de negocio:
 // - Dos canales distintos que no se mezclan: `type` es el canal de la
@@ -102,5 +102,45 @@ export const create = mutation({
       await applySaleStatus(ctx, client, args.saleStatus);
     }
     return { contactId, clientId };
+  },
+});
+
+// Historial de interacciones de un cliente para la ficha P3 (ARC-14).
+//
+// - Orden: la fecha de la interacción más reciente primero; con la misma fecha,
+//   la última anotada (`createdAt`, y `_creationTime` como desempate final, para
+//   que el orden sea siempre el mismo).
+// - `.collect()` sin límite es deliberado: el PRD pide el historial completo.
+//   Si algún cliente llega a tener cientos de interacciones, hará falta paginar
+//   (otro ticket).
+// - Proyección mínima: solo los campos que pinta la ficha. Si `contacts` gana
+//   campos sensibles, no salen de aquí sin decidirlo.
+// - Sin usuario del equipo, lista vacía (guard `getTeamUser`, como el resto de
+//   lecturas).
+export const listByClient = query({
+  args: { clientId: v.id("clients") },
+  handler: async (ctx, args) => {
+    const user = await getTeamUser(ctx);
+    if (user === null) {
+      return [];
+    }
+    const contacts = await ctx.db
+      .query("contacts")
+      .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
+      .collect();
+    contacts.sort(
+      (a, b) =>
+        (a.date < b.date ? 1 : a.date > b.date ? -1 : 0) ||
+        b.createdAt - a.createdAt ||
+        b._creationTime - a._creationTime,
+    );
+    return contacts.map((c) => ({
+      _id: c._id,
+      type: c.type,
+      note: c.note,
+      date: c.date,
+      performedById: c.performedById,
+      createdById: c.createdById,
+    }));
   },
 });

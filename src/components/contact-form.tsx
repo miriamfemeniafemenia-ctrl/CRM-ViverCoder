@@ -11,21 +11,15 @@ import {
   notePlaceholder,
   saleStatusToSend,
 } from "@/lib/contact-form";
+import { CONTACT_TYPE_OPTIONS } from "@/lib/contact-history";
 import { NOTE_MAX_LENGTH, todayISODateMadrid } from "@/lib/reminders";
 import { SALE_STATUS_OPTIONS } from "@/lib/sale-status";
 import type { ClientChannel, ContactChannel, SaleStatus } from "@/types";
 
-// Canal de la INTERACCIÓN (`contacts.type`). No confundir con el canal de
-// captación del cliente nuevo (`clients.channel`, `CLIENT_CHANNELS`): son
-// uniones distintas ("correo" solo existe aquí, "presencial" solo allí).
-const CONTACT_TYPES: { value: ContactChannel; label: string }[] = [
-  { value: "llamada", label: "Llamada" },
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "correo", label: "Correo" },
-  { value: "redes", label: "Redes sociales" },
-  { value: "web", label: "Web" },
-];
-
+// Canal de captación del cliente nuevo (`clients.channel`). No confundir con
+// el canal de la INTERACCIÓN (`contacts.type`, `CONTACT_TYPE_OPTIONS` de
+// src/lib/contact-history.ts, compartido con el historial de P3): son uniones
+// distintas ("correo" solo existe allí, "presencial" solo aquí).
 const CLIENT_CHANNELS: { value: ClientChannel; label: string }[] = [
   { value: "llamada", label: "Llamada" },
   { value: "whatsapp", label: "WhatsApp" },
@@ -390,7 +384,7 @@ export function ContactForm({
           disabled={isSaving}
           className={`bg-surface-card ${fieldClass}`}
         >
-          {CONTACT_TYPES.map((c) => (
+          {CONTACT_TYPE_OPTIONS.map((c) => (
             <option key={c.value} value={c.value}>
               {c.label}
             </option>

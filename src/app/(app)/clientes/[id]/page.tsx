@@ -5,6 +5,7 @@ import Link from "next/link";
 import { type ReactNode, use, useState } from "react";
 import { BadgeMenu } from "@/components/badge-menu";
 import { ClosedSaleDialog } from "@/components/closed-sale-dialog";
+import { ContactHistoryItem } from "@/components/contact-history-item";
 import { ReminderItem } from "@/components/reminder-item";
 import {
   agentDisplay,
@@ -21,6 +22,7 @@ import {
   priorityBadgeClass,
   SEX_OPTIONS,
 } from "@/lib/client-form";
+import { contactAuthor } from "@/lib/contact-history";
 import {
   SALE_STATUS_OPTIONS,
   saleStatusBadgeClass,
@@ -42,11 +44,12 @@ const CHANNEL_LABEL: Record<string, string> = {
 // ARC-9), los datos ampliados (ARC-50: DNI, nacimiento, dirección, agente…;
 // vacíos con guion, como teléfono y correo), la prioridad y el estado de venta
 // con cambio rápido (ARC-33; F7/ARC-18) — al pasar a «Cerrado», aviso de venta
-// cerrada (F8/ARC-19) — y una lista mínima de recordatorios
-// pendientes (ARC-60, alta con asignación; ARC-61, editar y eliminar). La
-// sección completa de F5 (vencidos destacados, marcar como hecho) es ARC-16; el
-// resto de funciones de la ficha (F3, F4, F10 — historial, siniestros,
-// pólizas...) siguen pendientes: ARC-12, ARC-14, ARC-21, ARC-52, ARC-56.
+// cerrada (F8/ARC-19) —, el historial de interacciones (F4/ARC-14: la más
+// reciente primero, con «Anotar interacción» en su cabecera) y una lista mínima
+// de recordatorios pendientes (ARC-60, alta con asignación; ARC-61, editar y
+// eliminar). La sección completa de F5 (vencidos destacados, marcar como hecho)
+// es ARC-16; el resto de funciones de la ficha (F3, F10 — siniestros,
+// pólizas...) siguen pendientes: ARC-12, ARC-21, ARC-52, ARC-56.
 //
 // `?from=` dice desde dónde se abrió (regla de navegación ARC-8: «volver» lleva
 // al origen) y, desde P1 con un cliente elegido en el filtro, `?vista=recordatorios`
@@ -67,6 +70,7 @@ export default function Page({
   const pendingReminders = useQuery(api.reminders.listPendingByClient, {
     clientId,
   });
+  const contacts = useQuery(api.contacts.listByClient, { clientId });
   const removeReminder = useMutation(api.reminders.remove);
   const setPriority = useMutation(api.clients.setPriority);
   const setSaleStatus = useMutation(api.clients.setSaleStatus);
@@ -208,15 +212,47 @@ export default function Page({
     </div>
   );
 
-  const interactionButton = (
-    <div className="mt-4 flex max-w-lg justify-end">
-      <Link
-        href={`/interacciones/nueva?clientId=${clientId}&from=${clientId}`}
-        className="border-border-default text-text-primary flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium"
-      >
-        Anotar interacción
-      </Link>
-    </div>
+  // Historial de interacciones (ARC-14). Decisiones de Miriam (24/11/2026):
+  // va tras los datos del cliente; «Anotar interacción» vive en su cabecera; el
+  // autor es quien la realizó (y «anotada por» si la registró otra persona);
+  // solo la fecha. Lista completa, sin scroll interno: la página crece.
+  const historyCard = (
+    <section
+      aria-labelledby="historial-titulo"
+      className="border-border-default bg-surface-card max-w-lg rounded-lg border p-6 shadow-sm"
+    >
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h2 id="historial-titulo" className="text-text-primary text-lg font-semibold">
+          Historial de interacciones
+        </h2>
+        <Link
+          href={`/interacciones/nueva?clientId=${clientId}&from=${clientId}`}
+          className="border-border-default text-text-primary flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium"
+        >
+          Anotar interacción
+        </Link>
+      </div>
+
+      {contacts === undefined ? (
+        <p className="text-text-tertiary text-sm">Cargando…</p>
+      ) : contacts.length === 0 ? (
+        <p className="text-text-secondary text-sm">
+          Todavía no hay interacciones con este cliente.
+        </p>
+      ) : (
+        <ul className="divide-border-default flex flex-col divide-y">
+          {contacts.map((contact) => (
+            <ContactHistoryItem
+              key={contact._id}
+              type={contact.type}
+              date={contact.date}
+              note={contact.note}
+              author={contactAuthor(contact.performedById, contact.createdById, users)}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 
   const remindersCard = (
@@ -269,12 +305,12 @@ export default function Page({
           <p className="text-text-secondary mb-2 max-w-lg text-sm">{client.name}</p>
           {remindersCard}
           <div className="mt-4">{clientCard}</div>
-          {interactionButton}
+          <div className="mt-4">{historyCard}</div>
         </>
       ) : (
         <>
           {clientCard}
-          {interactionButton}
+          <div className="mt-4">{historyCard}</div>
           <div className="mt-4">{remindersCard}</div>
         </>
       )}
