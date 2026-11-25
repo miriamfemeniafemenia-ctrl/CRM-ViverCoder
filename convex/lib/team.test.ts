@@ -20,8 +20,16 @@ import { NOT_AUTHENTICATED } from "./team";
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
-    const miriam = await ctx.db.insert("users", { name: "Miriam", email: "m@test.es", role: "owner" });
-    const fantasma = await ctx.db.insert("users", { name: "Borrado", email: "b@test.es", role: "agent" });
+    const miriam = await ctx.db.insert("users", {
+      name: "Miriam",
+      email: "m@test.es",
+      role: "owner",
+    });
+    const fantasma = await ctx.db.insert("users", {
+      name: "Borrado",
+      email: "b@test.es",
+      role: "agent",
+    });
     await ctx.db.delete(fantasma);
     const clientId = await ctx.db.insert("clients", {
       name: "Cliente",
@@ -41,6 +49,17 @@ async function setup() {
       createdById: miriam,
       assignedToId: miriam,
     });
+    // Una interacción, para que el vacío de `contacts.listByClient` con sesión
+    // ajena signifique «no se lee», no «no hay datos» (ARC-14).
+    await ctx.db.insert("contacts", {
+      clientId,
+      type: "llamada",
+      note: "nota",
+      date: "2099-01-01",
+      performedById: miriam,
+      createdById: miriam,
+      createdAt: 1,
+    });
     return { miriam, fantasma, clientId, reminderId };
   });
   // Sesión válida en apariencia, pero su usuario no existe: no es del equipo.
@@ -56,15 +75,22 @@ const snapshot = (s: Ctx) =>
     reminders: await ctx.db.query("reminders").collect(),
   }));
 
-type Case = { kind: "query"; expected: unknown; run: (s: Ctx) => Promise<unknown> } | {
-  kind: "mutation";
-  run: (s: Ctx) => Promise<unknown>;
-};
+type Case =
+  | { kind: "query"; expected: unknown; run: (s: Ctx) => Promise<unknown> }
+  | {
+      kind: "mutation";
+      run: (s: Ctx) => Promise<unknown>;
+    };
 
 const cases: Record<string, Case> = {
   "clients.js:create": {
     kind: "mutation",
-    run: (s) => s.ajena.mutation(api.clients.create, { name: "X", phone: "600000000", channel: "web" }),
+    run: (s) =>
+      s.ajena.mutation(api.clients.create, {
+        name: "X",
+        phone: "600000000",
+        channel: "web",
+      }),
   },
   "clients.js:update": {
     kind: "mutation",
@@ -79,20 +105,37 @@ const cases: Record<string, Case> = {
   },
   "clients.js:setPriority": {
     kind: "mutation",
-    run: (s) => s.ajena.mutation(api.clients.setPriority, { id: s.clientId, priority: "alta" }),
+    run: (s) =>
+      s.ajena.mutation(api.clients.setPriority, { id: s.clientId, priority: "alta" }),
   },
   "clients.js:setSaleStatus": {
     kind: "mutation",
-    run: (s) => s.ajena.mutation(api.clients.setSaleStatus, { id: s.clientId, saleStatus: "cerrado" }),
+    run: (s) =>
+      s.ajena.mutation(api.clients.setSaleStatus, {
+        id: s.clientId,
+        saleStatus: "cerrado",
+      }),
   },
-  "clients.js:list": { kind: "query", expected: [], run: (s) => s.ajena.query(api.clients.list, {}) },
-  "clients.js:get": { kind: "query", expected: null, run: (s) => s.ajena.query(api.clients.get, { id: s.clientId }) },
+  "clients.js:list": {
+    kind: "query",
+    expected: [],
+    run: (s) => s.ajena.query(api.clients.list, {}),
+  },
+  "clients.js:get": {
+    kind: "query",
+    expected: null,
+    run: (s) => s.ajena.query(api.clients.get, { id: s.clientId }),
+  },
   "clients.js:searchForPicker": {
     kind: "query",
     expected: [],
     run: (s) => s.ajena.query(api.clients.searchForPicker, { term: "Cliente" }),
   },
-  "clients.js:lookup": { kind: "query", expected: null, run: (s) => s.ajena.query(api.clients.lookup, { id: s.clientId }) },
+  "clients.js:lookup": {
+    kind: "query",
+    expected: null,
+    run: (s) => s.ajena.query(api.clients.lookup, { id: s.clientId }),
+  },
   "clients.js:citiesForPostalCode": {
     kind: "query",
     expected: { postalCode: null, cities: [] },
@@ -109,6 +152,11 @@ const cases: Record<string, Case> = {
         performedById: s.miriam,
       }),
   },
+  "contacts.js:listByClient": {
+    kind: "query",
+    expected: [],
+    run: (s) => s.ajena.query(api.contacts.listByClient, { clientId: s.clientId }),
+  },
   "reminders.js:create": {
     kind: "mutation",
     run: (s) =>
@@ -119,7 +167,11 @@ const cases: Record<string, Case> = {
         assignedToId: s.miriam,
       }),
   },
-  "reminders.js:get": { kind: "query", expected: null, run: (s) => s.ajena.query(api.reminders.get, { id: s.reminderId }) },
+  "reminders.js:get": {
+    kind: "query",
+    expected: null,
+    run: (s) => s.ajena.query(api.reminders.get, { id: s.reminderId }),
+  },
   "reminders.js:update": {
     kind: "mutation",
     run: (s) =>
@@ -150,10 +202,19 @@ const cases: Record<string, Case> = {
   "reminders.js:listPendingByClient": {
     kind: "query",
     expected: [],
-    run: (s) => s.ajena.query(api.reminders.listPendingByClient, { clientId: s.clientId }),
+    run: (s) =>
+      s.ajena.query(api.reminders.listPendingByClient, { clientId: s.clientId }),
   },
-  "users.js:list": { kind: "query", expected: [], run: (s) => s.ajena.query(api.users.list, {}) },
-  "users.js:current": { kind: "query", expected: null, run: (s) => s.ajena.query(api.users.current, {}) },
+  "users.js:list": {
+    kind: "query",
+    expected: [],
+    run: (s) => s.ajena.query(api.users.list, {}),
+  },
+  "users.js:current": {
+    kind: "query",
+    expected: null,
+    run: (s) => s.ajena.query(api.users.current, {}),
+  },
 };
 
 describe("política de acceso: sesión ajena al equipo", () => {
@@ -189,7 +250,9 @@ describe("política de acceso: sesión ajena al equipo", () => {
     const s = await setup();
     expect(await s.t.query(api.clients.list, {})).toEqual([]);
     expect(await s.t.query(api.users.current, {})).toBeNull();
-    expect(await s.t.query(api.clients.citiesForPostalCode, { postalCode: "46001" })).toEqual({
+    expect(
+      await s.t.query(api.clients.citiesForPostalCode, { postalCode: "46001" }),
+    ).toEqual({
       postalCode: null,
       cities: [],
     });
@@ -199,6 +262,8 @@ describe("política de acceso: sesión ajena al equipo", () => {
     const s = await setup();
     const as = s.t.withIdentity({ subject: `${s.miriam}|sesion-test` });
     expect((await as.query(api.users.current, {}))?._id).toBe(s.miriam);
-    expect(await as.query(api.users.list, {})).toEqual([{ _id: s.miriam as Id<"users">, name: "Miriam" }]);
+    expect(await as.query(api.users.list, {})).toEqual([
+      { _id: s.miriam as Id<"users">, name: "Miriam" },
+    ]);
   });
 });

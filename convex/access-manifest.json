@@ -15,6 +15,7 @@
     "clients.js:lookup": "getTeamUser",
     "clients.js:citiesForPostalCode": "getTeamUser",
     "contacts.js:create": "requireTeamUser",
+    "contacts.js:listByClient": "getTeamUser",
     "reminders.js:create": "requireTeamUser",
     "reminders.js:get": "getTeamUser",
     "reminders.js:update": "requireTeamUser",

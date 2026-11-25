@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Suspense } from "react";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -29,13 +29,13 @@ beforeEach(() => {
   setQuery(api.users.list, []);
 });
 
-async function renderPage() {
+async function renderPage(searchParams: { from?: string; vista?: string } = {}) {
   await act(async () => {
     render(
       <Suspense fallback={null}>
         <Page
           params={Promise.resolve({ id: CLIENT_ID })}
-          searchParams={Promise.resolve({})}
+          searchParams={Promise.resolve(searchParams)}
         />
       </Suspense>,
     );
@@ -131,5 +131,107 @@ describe("Ficha P3: aviso de venta cerrada (ARC-19)", () => {
     expect(link.getAttribute("href")).toBe(
       `/interacciones/nueva?clientId=${CLIENT_ID}&from=${CLIENT_ID}&motivo=venta-cerrada`,
     );
+  });
+});
+
+describe("Ficha P3: historial de interacciones (ARC-14)", () => {
+  const MIRIAM = { _id: "u1", name: "Miriam" };
+  const ANTONIO = { _id: "u2", name: "Antonio" };
+  // Ya ordenadas como las devuelve `contacts.listByClient`.
+  const CONTACTS = [
+    {
+      _id: "k1",
+      type: "llamada",
+      note: "Contrató seguro de coche",
+      date: "2026-11-23",
+      performedById: "u1",
+      createdById: "u1",
+    },
+    {
+      _id: "k2",
+      type: "whatsapp",
+      note: "Pidió presupuesto de hogar",
+      date: "2026-11-20",
+      performedById: "u2",
+      createdById: "u1",
+    },
+  ];
+
+  const historySection = () =>
+    screen.getByRole("region", { name: "Historial de interacciones" });
+  const entries = () => within(historySection()).queryAllByRole("listitem");
+
+  test("muestra las interacciones en el orden recibido, con su autor", async () => {
+    setQuery(api.users.list, [MIRIAM, ANTONIO]);
+    setQuery(api.contacts.listByClient, CONTACTS);
+    await renderPage();
+
+    const items = entries();
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent).toContain("Llamada");
+    expect(items[0].textContent).toContain("23 nov 2026");
+    expect(items[0].textContent).toContain("Contrató seguro de coche");
+    expect(items[0].textContent).toContain("— Miriam");
+    expect(items[0].textContent).not.toContain("anotada por");
+    expect(items[1].textContent).toContain("Pidió presupuesto de hogar");
+    expect(items[1].textContent).toContain("— Antonio (anotada por Miriam)");
+  });
+
+  test("mientras cargan los usuarios, el autor es «…»", async () => {
+    setQuery(api.users.list, undefined);
+    setQuery(api.contacts.listByClient, CONTACTS);
+    await renderPage();
+
+    expect(entries()[0].textContent).toContain("— …");
+  });
+
+  test("sin interacciones, un mensaje y ninguna entrada", async () => {
+    setQuery(api.contacts.listByClient, []);
+    await renderPage();
+
+    expect(
+      within(historySection()).getByText(
+        "Todavía no hay interacciones con este cliente.",
+      ),
+    ).toBeTruthy();
+    expect(entries()).toHaveLength(0);
+  });
+
+  test("«Anotar interacción» está en la cabecera del historial y lleva al formulario", async () => {
+    setQuery(api.contacts.listByClient, []);
+    await renderPage();
+
+    const links = screen.getAllByRole("link", { name: "Anotar interacción" });
+    expect(links).toHaveLength(1);
+    expect(historySection().contains(links[0])).toBe(true);
+    expect(links[0].getAttribute("href")).toBe(
+      `/interacciones/nueva?clientId=${CLIENT_ID}&from=${CLIENT_ID}`,
+    );
+  });
+
+  // Posición relativa de dos nodos en el documento.
+  const isBefore = (a: Node, b: Node) =>
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+  test("orden normal: datos, historial y recordatorios", async () => {
+    setQuery(api.contacts.listByClient, []);
+    await renderPage();
+
+    const data = screen.getByRole("heading", { level: 1, name: "Ana Pérez" });
+    const history = screen.getByRole("heading", { name: "Historial de interacciones" });
+    const reminders = screen.getByRole("heading", { name: "Recordatorios pendientes" });
+    expect(isBefore(data, history)).toBe(true);
+    expect(isBefore(history, reminders)).toBe(true);
+  });
+
+  test("desde P1 con ?vista=recordatorios: recordatorios, datos e historial", async () => {
+    setQuery(api.contacts.listByClient, []);
+    await renderPage({ from: "p1", vista: "recordatorios" });
+
+    const data = screen.getByRole("heading", { level: 1, name: "Ana Pérez" });
+    const history = screen.getByRole("heading", { name: "Historial de interacciones" });
+    const reminders = screen.getByRole("heading", { name: "Recordatorios pendientes" });
+    expect(isBefore(reminders, data)).toBe(true);
+    expect(isBefore(data, history)).toBe(true);
   });
 });
