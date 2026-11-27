@@ -138,6 +138,11 @@ export default defineSchema({
     status: v.union(v.literal("pendiente"), v.literal("atendido")),
     createdById: v.id("users"),
     assignedToId: v.id("users"),
+    // Al marcarlo como hecho (ARC-16): cuándo y quién (la sesión activa, que
+    // puede no ser la persona asignada). Presentes si y solo si
+    // `status === "atendido"`; los recordatorios anteriores no los tienen.
+    completedAt: v.optional(v.number()),
+    completedById: v.optional(v.id("users")),
   })
     .index("by_client", ["clientId"])
     .index("by_assignedTo_status", ["assignedToId", "status"]),

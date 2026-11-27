@@ -20,6 +20,7 @@
     "reminders.js:get": "getTeamUser",
     "reminders.js:update": "requireTeamUser",
     "reminders.js:remove": "requireTeamUser",
+    "reminders.js:complete": "requireTeamUser",
     "reminders.js:listPendingByAssignee": "getTeamUser",
     "reminders.js:countDueByAssignee": "getTeamUser",
     "reminders.js:listPendingByClient": "getTeamUser",

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { reminderErrorMessage } from "@/lib/reminders";
 
 const iconProps = {
@@ -17,19 +17,37 @@ const iconProps = {
 } as const;
 
 const iconButtonClass =
-  "relative inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary before:absolute before:-inset-1 hover:bg-surface-sunken";
+  "relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-text-tertiary before:absolute before:-inset-1 hover:bg-surface-sunken disabled:opacity-60";
 
-// Fila de recordatorio de P1 y P3 (ARC-61, ARC-70), portada de
+type Pending = "complete" | "delete";
+
+const CONFIRM: Record<Pending, { question: string; fallback: string }> = {
+  complete: {
+    question: "¿Marcar como hecho?",
+    fallback: "No se ha podido marcar el recordatorio como hecho. Inténtalo de nuevo.",
+  },
+  delete: {
+    question: "¿Eliminar?",
+    fallback: "No se ha podido eliminar el recordatorio. Inténtalo de nuevo.",
+  },
+};
+
+// Fila de recordatorio de P1 y P3 (ARC-61, ARC-70, ARC-16), portada de
 // `lists/ReminderItem` del sistema de diseño. Devuelve un <li>: se usa dentro
-// de un <ul>. La fila no es clicable; solo lápiz (edita) y papelera (elimina,
-// con confirmación en la propia fila). "Marcar como hecho" es ARC-62.
+// de un <ul>. La fila no es clicable: check a la izquierda (marcar como hecho),
+// lápiz (edita) y papelera (elimina). Marcar como hecho y eliminar piden
+// confirmación en la propia fila; al abrirla el foco va a «No» y, si se
+// cancela, vuelve al botón que la abrió. Vencido (fecha pasada y aún
+// pendiente): borde izquierdo y «Vencido ·» en color de aviso.
 export function ReminderItem({
   clientName,
   clientHref,
   date,
   note,
   assignedTo,
+  overdue,
   editHref,
+  onComplete,
   onDelete,
 }: {
   // `undefined` = P3 (no se muestra, ya está dentro de la ficha del cliente);
@@ -42,37 +60,86 @@ export function ReminderItem({
   date: string;
   note: string;
   assignedTo: string;
+  // Lo calcula la página: `date < hoy` (Europe/Madrid, `useTodayMadrid`).
+  overdue: boolean;
   editHref: string;
-  // Rechaza si falla; el valor con el que resuelve no importa (una mutation de
-  // Convex sin retorno resuelve a `null`).
+  // Las dos rechazan si fallan; el valor con el que resuelven no importa (una
+  // mutation de Convex sin retorno resuelve a `null`). Al completarse, la
+  // query reactiva quita la fila de la lista.
+  onComplete: () => Promise<unknown>;
   onDelete: () => Promise<unknown>;
 }) {
-  const [confirming, setConfirming] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirming, setConfirming] = useState<Pending | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const completeRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const noRef = useRef<HTMLButtonElement>(null);
+  // Botón al que vuelve el foco al cancelar una confirmación (un ref: no se
+  // pinta, solo lo lee el efecto).
+  const returnFocusRef = useRef<Pending | null>(null);
 
-  async function handleConfirmDelete() {
-    if (isDeleting) return;
+  useEffect(() => {
+    if (confirming !== null) {
+      noRef.current?.focus();
+      return;
+    }
+    const target = returnFocusRef.current;
+    returnFocusRef.current = null;
+    if (target !== null) {
+      (target === "complete" ? completeRef : deleteRef).current?.focus();
+    }
+  }, [confirming]);
+
+  function open(action: Pending) {
     setError(null);
-    setIsDeleting(true);
+    setConfirming(action);
+  }
+
+  function cancel() {
+    returnFocusRef.current = confirming;
+    setConfirming(null);
+    setError(null);
+  }
+
+  async function handleConfirm() {
+    if (isSaving || confirming === null) return;
+    const action = confirming;
+    setError(null);
+    setIsSaving(true);
     try {
-      await onDelete();
-      setConfirming(false);
+      await (action === "complete" ? onComplete() : onDelete());
+      setConfirming(null);
     } catch (err) {
-      setError(
-        reminderErrorMessage(
-          err,
-          "No se ha podido eliminar el recordatorio. Inténtalo de nuevo.",
-        ),
-      );
+      setError(reminderErrorMessage(err, CONFIRM[action].fallback));
     } finally {
-      setIsDeleting(false);
+      setIsSaving(false);
     }
   }
 
   return (
-    <li className="border-border-default flex flex-col gap-1 rounded-md border px-4 py-3">
+    <li
+      className={`flex flex-col gap-1 rounded-md border px-4 py-3 ${
+        overdue ? "border-warning-border border-l-[3px]" : "border-border-default"
+      }`}
+    >
       <div className="flex items-start gap-3">
+        {confirming === null && (
+          <button
+            ref={completeRef}
+            type="button"
+            aria-label="Marcar como hecho"
+            title="Marcar como hecho"
+            onClick={() => open("complete")}
+            className={iconButtonClass}
+          >
+            <svg {...iconProps} width={16} height={16}>
+              <circle cx="12" cy="12" r="9" />
+              <path d="M8 12.5l2.5 2.5L16 9" />
+            </svg>
+          </button>
+        )}
+
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           {clientName !== undefined &&
             (clientHref && clientName !== null ? (
@@ -87,37 +154,42 @@ export function ReminderItem({
                 {clientName ?? "Cliente no disponible"}
               </span>
             ))}
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-text-primary font-medium">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <span
+              className={`font-medium ${overdue ? "text-warning-fg" : "text-text-primary"}`}
+            >
+              {overdue && "Vencido · "}
               {new Date(`${date}T00:00:00`).toLocaleDateString("es-ES")}
             </span>
             <span className="text-text-tertiary text-xs">Asignado a {assignedTo}</span>
           </div>
-          <p className="text-text-secondary">{note}</p>
+          <p className="text-text-secondary [overflow-wrap:anywhere]">{note}</p>
         </div>
 
-        {confirming ? (
-          <div className="flex items-center gap-4">
-            <span className="text-text-secondary text-xs">¿Eliminar?</span>
-            <button
-              type="button"
-              onClick={handleConfirmDelete}
-              disabled={isDeleting}
-              className="bg-primary-500 text-on-brand relative h-7 rounded-md px-3 text-xs font-medium before:absolute before:inset-x-0 before:-inset-y-2 disabled:opacity-60"
-            >
-              Sí
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setConfirming(false);
-                setError(null);
-              }}
-              disabled={isDeleting}
-              className="border-border-default text-text-primary relative h-7 rounded-md border px-3 text-xs font-medium before:absolute before:inset-x-0 before:-inset-y-2 disabled:opacity-60"
-            >
-              No
-            </button>
+        {confirming !== null ? (
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+            <span className="text-text-secondary text-xs">
+              {CONFIRM[confirming].question}
+            </span>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={isSaving}
+                className="bg-primary-500 text-on-brand relative h-7 rounded-md px-3 text-xs font-medium before:absolute before:inset-x-0 before:-inset-y-2 disabled:opacity-60"
+              >
+                Sí
+              </button>
+              <button
+                ref={noRef}
+                type="button"
+                onClick={cancel}
+                disabled={isSaving}
+                className="border-border-default text-text-primary relative h-7 rounded-md border px-3 text-xs font-medium before:absolute before:inset-x-0 before:-inset-y-2 disabled:opacity-60"
+              >
+                No
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -132,10 +204,11 @@ export function ReminderItem({
               </svg>
             </Link>
             <button
+              ref={deleteRef}
               type="button"
               aria-label="Eliminar recordatorio"
               title="Eliminar recordatorio"
-              onClick={() => setConfirming(true)}
+              onClick={() => open("delete")}
               className={iconButtonClass}
             >
               <svg {...iconProps}>

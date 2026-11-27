@@ -235,3 +235,48 @@ describe("Ficha P3: historial de interacciones (ARC-14)", () => {
     expect(isBefore(data, history)).toBe(true);
   });
 });
+
+describe("Ficha P3: recordatorios (ARC-16)", () => {
+  // Fechas fijas y lejanas: no dependen del reloj ni de la zona horaria.
+  const reminder = (id: string, date: string) => ({
+    _id: id,
+    _creationTime: 0,
+    clientId: CLIENT_ID,
+    date,
+    note: `Nota ${id}`,
+    status: "pendiente",
+    createdById: "u1",
+    assignedToId: "u1",
+  });
+
+  beforeEach(() => {
+    setQuery(api.reminders.listPendingByClient, [
+      reminder("r-pasado", "2000-01-01"),
+      reminder("r-futuro", "2999-12-31"),
+    ]);
+    setQuery(api.users.list, [{ _id: "u1", name: "Mónica" }]);
+  });
+
+  const row = (note: string) => screen.getByText(note).closest("li") as HTMLElement;
+
+  test("solo el de fecha pasada sale vencido", async () => {
+    await renderPage();
+    expect(row("Nota r-pasado").textContent).toContain("Vencido · ");
+    expect(row("Nota r-futuro").textContent).not.toContain("Vencido");
+  });
+
+  test("marcar como hecho llama a reminders.complete con su id", async () => {
+    const complete = mockMutation(api.reminders.complete);
+    complete.mockResolvedValue(null);
+    await renderPage();
+
+    const item = row("Nota r-futuro");
+    await userEvent.click(
+      within(item).getByRole("button", { name: "Marcar como hecho" }),
+    );
+    await userEvent.click(within(item).getByRole("button", { name: "Sí" }));
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete).toHaveBeenCalledWith({ id: "r-futuro" });
+  });
+});
