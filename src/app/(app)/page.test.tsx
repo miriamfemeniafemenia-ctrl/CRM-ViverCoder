@@ -5,7 +5,7 @@ import { api } from "../../../convex/_generated/api";
 import { mockMutation, setQuery } from "@/test/convex-mock";
 import Page from "./page";
 
-// P1 «Mis tareas de hoy» (ARC-16/ARC-17): vencidos destacados y marcar como
+// P1 «Tareas de hoy» (ARC-16/ARC-17): vencidos destacados y marcar como
 // hecho. Fechas fijas y lejanas: no dependen del reloj ni de la zona horaria.
 
 const reminder = (id: string, date: string) => ({
