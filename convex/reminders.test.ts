@@ -21,7 +21,9 @@ const FUTURE = "2999-12-31";
 const FUTURE_2 = "2999-12-30";
 const CHANGED = "El recordatorio ha cambiado en otra sesión; vuelve a abrirlo";
 
-async function setup(overrides: { date?: string; status?: "pendiente" | "atendido" } = {}) {
+async function setup(
+  overrides: { date?: string; status?: "pendiente" | "atendido" } = {},
+) {
   const t = convexTest(schema, modules);
   const base = await t.run(async (ctx) => {
     const mk = (name: string, email: string, role: "owner" | "agent") =>
@@ -47,13 +49,15 @@ async function setup(overrides: { date?: string; status?: "pendiente" | "atendid
     return { miriam, monica, antonio, reminderId };
   });
   // `getAuthUserId` solo lee `subject.split("|")[0]` (formato `userId|sessionId`).
-  const as = (userId: Id<"users">) => t.withIdentity({ subject: `${userId}|sesion-test` });
+  const as = (userId: Id<"users">) =>
+    t.withIdentity({ subject: `${userId}|sesion-test` });
   return { t, as, ...base };
 }
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 
-const get = (s: Ctx, id: Id<"reminders"> = s.reminderId) => s.t.run((ctx) => ctx.db.get(id));
+const get = (s: Ctx, id: Id<"reminders"> = s.reminderId) =>
+  s.t.run((ctx) => ctx.db.get(id));
 
 // Texto del ConvexError de negocio (`userError`); falla si no hubo rechazo.
 const userMessage = async (p: Promise<unknown>) => {
@@ -85,7 +89,11 @@ describe("reminders.update", () => {
   test("guarda cuando todo coincide, recortando la nota", async () => {
     const s = await setup();
     const seen = { date: FUTURE, note: "Llamar", assignedToId: s.monica };
-    await edit(s, s.miriam, seen, { date: FUTURE_2, note: "  Nueva nota  ", assignedToId: s.antonio });
+    await edit(s, s.miriam, seen, {
+      date: FUTURE_2,
+      note: "  Nueva nota  ",
+      assignedToId: s.antonio,
+    });
     expect(await get(s)).toMatchObject({
       date: FUTURE_2,
       note: "Nueva nota",
@@ -146,13 +154,17 @@ describe("reminders.update", () => {
         ...extra,
       } as never);
     // Error de validación de argumentos, no un ConvexError de negocio.
-    await expect(call({ expectedDate: FUTURE, expectedAssignedToId: s.monica })).rejects.toThrow(
-      /expectedNote/,
-    );
+    await expect(
+      call({ expectedDate: FUTURE, expectedAssignedToId: s.monica }),
+    ).rejects.toThrow(/expectedNote/);
     await expect(call({ expectedDate: FUTURE, expectedNote: "Llamar" })).rejects.toThrow(
       /expectedAssignedToId/,
     );
-    expect(await get(s)).toMatchObject({ note: "Llamar", date: FUTURE, assignedToId: s.monica });
+    expect(await get(s)).toMatchObject({
+      note: "Llamar",
+      date: FUTURE,
+      assignedToId: s.monica,
+    });
   });
 
   test("recordatorio eliminado entre carga y guardado", async () => {
@@ -201,18 +213,18 @@ describe("reminders.update", () => {
     test("nota de más de 500 caracteres", async () => {
       const s = await setup();
       const seen = { date: FUTURE, note: "Llamar", assignedToId: s.monica };
-      expect(await userMessage(edit(s, s.miriam, seen, { ...seen, note: "a".repeat(501) }))).toMatch(
-        /demasiado larga/,
-      );
+      expect(
+        await userMessage(edit(s, s.miriam, seen, { ...seen, note: "a".repeat(501) })),
+      ).toMatch(/demasiado larga/);
       expect(await get(s)).toMatchObject({ note: "Llamar" });
     });
 
     test("fecha imposible de calendario", async () => {
       const s = await setup();
       const seen = { date: FUTURE, note: "Llamar", assignedToId: s.monica };
-      expect(await userMessage(edit(s, s.miriam, seen, { ...seen, date: "2999-02-30" }))).toBe(
-        "La fecha no es válida",
-      );
+      expect(
+        await userMessage(edit(s, s.miriam, seen, { ...seen, date: "2999-02-30" })),
+      ).toBe("La fecha no es válida");
       expect(await get(s)).toMatchObject({ date: FUTURE });
     });
 
@@ -235,14 +247,18 @@ describe("reminders.update", () => {
     test("responsable inexistente", async () => {
       const s = await setup();
       const ghost = await s.t.run(async (ctx) => {
-        const id = await ctx.db.insert("users", { name: "X", email: "x@test.es", role: "agent" });
+        const id = await ctx.db.insert("users", {
+          name: "X",
+          email: "x@test.es",
+          role: "agent",
+        });
         await ctx.db.delete(id);
         return id;
       });
       const seen = { date: FUTURE, note: "Llamar", assignedToId: s.monica };
-      expect(await userMessage(edit(s, s.miriam, seen, { ...seen, assignedToId: ghost }))).toBe(
-        "El usuario asignado no existe",
-      );
+      expect(
+        await userMessage(edit(s, s.miriam, seen, { ...seen, assignedToId: ghost })),
+      ).toBe("El usuario asignado no existe");
       expect(await get(s)).toMatchObject({ assignedToId: s.monica });
     });
   });
@@ -256,7 +272,10 @@ describe("reminders.update", () => {
     const s = await setup(); // asignado a Mónica
     const seen = { date: FUTURE, note: "Llamar", assignedToId: s.monica };
     await edit(s, s.antonio, seen, { ...seen, note: "Editado por Antonio" });
-    expect(await get(s)).toMatchObject({ note: "Editado por Antonio", assignedToId: s.monica });
+    expect(await get(s)).toMatchObject({
+      note: "Editado por Antonio",
+      assignedToId: s.monica,
+    });
   });
 });
 
@@ -358,4 +377,143 @@ describe("countDueByAssignee", () => {
       expect(await userMessage(count(s, s.miriam, today))).toBe("La fecha no es válida");
     },
   );
+});
+
+// `complete` (ARC-16): «marcar como hecho» desde P3 y P1.
+describe("reminders.complete (ARC-16)", () => {
+  const complete = (s: Ctx, who: Id<"users">, id: Id<"reminders"> = s.reminderId) =>
+    s.as(who).mutation(api.reminders.complete, { id });
+
+  // Invariante: atendido ⇒ `completedAt` y `completedById` presentes;
+  // pendiente ⇒ los dos ausentes.
+  test("un pendiente no lleva quién ni cuándo", async () => {
+    const s = await setup();
+    const r = await get(s);
+    expect(r?.status).toBe("pendiente");
+    expect(r?.completedAt).toBeUndefined();
+    expect(r?.completedById).toBeUndefined();
+  });
+
+  test("pasa a atendido con quién (la sesión, no la persona asignada) y cuándo", async () => {
+    const s = await setup(); // asignado a Mónica
+    const before = Date.now();
+    await complete(s, s.antonio);
+    const r = await get(s);
+    expect(r).toMatchObject({
+      status: "atendido",
+      completedById: s.antonio,
+      assignedToId: s.monica,
+      note: "Llamar",
+      date: FUTURE,
+    });
+    expect(r?.completedAt).toBeGreaterThanOrEqual(before);
+    expect(r?.completedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  test("desaparece de las listas de pendientes y del contador", async () => {
+    const s = await setup({ date: PAST }); // vencido, asignado a Mónica
+    const clientId = (await get(s))!.clientId;
+    const listByClient = () =>
+      s.as(s.miriam).query(api.reminders.listPendingByClient, { clientId });
+    const listMine = () => s.as(s.monica).query(api.reminders.listPendingByAssignee, {});
+    const countMine = () =>
+      s.as(s.monica).query(api.reminders.countDueByAssignee, { today: "2026-11-02" });
+    expect(await listByClient()).toHaveLength(1);
+    expect(await listMine()).toHaveLength(1);
+    expect(await countMine()).toBe(1);
+
+    await complete(s, s.monica);
+
+    expect(await listByClient()).toEqual([]);
+    expect(await listMine()).toEqual([]);
+    expect(await countMine()).toBe(0);
+  });
+
+  test("una segunda persona que lo marca después no pisa quién ni cuándo", async () => {
+    const s = await setup();
+    await complete(s, s.monica);
+    const first = await get(s);
+    await new Promise((r) => setTimeout(r, 5)); // que `Date.now()` avance
+    await expect(complete(s, s.antonio)).resolves.toBeNull();
+    const after = await get(s);
+    expect(after).toEqual(first);
+    expect(after).toMatchObject({ status: "atendido", completedById: s.monica });
+  });
+
+  test("ya no existe (otra sesión lo borró): avisa y no lo recrea", async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.delete(s.reminderId));
+    expect(await userMessage(complete(s, s.miriam))).toBe("El recordatorio ya no existe");
+    expect(await get(s)).toBeNull();
+  });
+
+  test("después de marcarlo, ni se edita ni se elimina", async () => {
+    const s = await setup();
+    await complete(s, s.miriam);
+    const seen = { date: FUTURE, note: "Llamar", assignedToId: s.monica };
+    expect(await userMessage(edit(s, s.miriam, seen, { ...seen, note: "X" }))).toBe(
+      "El recordatorio ya está atendido",
+    );
+    expect(
+      await userMessage(
+        s.as(s.miriam).mutation(api.reminders.remove, { id: s.reminderId }),
+      ),
+    ).toBe("El recordatorio ya está atendido");
+    expect(
+      await s.as(s.miriam).query(api.reminders.get, { id: s.reminderId }),
+    ).toBeNull();
+    expect(await get(s)).toMatchObject({ status: "atendido", completedById: s.miriam });
+  });
+
+  test("no autenticado", async () => {
+    const s = await setup();
+    await expect(
+      s.t.mutation(api.reminders.complete, { id: s.reminderId }),
+    ).rejects.toThrow("No autenticado");
+    const r = await get(s);
+    expect(r?.status).toBe("pendiente");
+    expect(r?.completedAt).toBeUndefined();
+    expect(r?.completedById).toBeUndefined();
+  });
+});
+
+// `listPendingByClient`: orden de P3 (ARC-16), el mismo que P1.
+describe("listPendingByClient", () => {
+  test("por fecha (el más antiguo primero), empate por _id, sin los atendidos", async () => {
+    const s = await setup(); // base: FUTURE, pendiente
+    const ids = await s.t.run(async (ctx) => {
+      const clientId = (await ctx.db.query("clients").first())!._id;
+      const otherClient = await ctx.db.insert("clients", {
+        name: "Otro",
+        channel: "web",
+        saleStatus: "interesado",
+        priority: "media",
+        createdAt: 0,
+      });
+      const mk = (
+        date: string,
+        status: "pendiente" | "atendido" = "pendiente",
+        c = clientId,
+      ) =>
+        ctx.db.insert("reminders", {
+          clientId: c,
+          date,
+          note: date,
+          status,
+          createdById: s.miriam,
+          assignedToId: s.miriam,
+        });
+      const b = await mk("2026-11-20");
+      const a = await mk(PAST);
+      const c = await mk("2026-11-20");
+      await mk("2026-11-10", "atendido");
+      await mk("2026-11-01", "pendiente", otherClient);
+      return { clientId, a, b, c };
+    });
+    const list = await s
+      .as(s.miriam)
+      .query(api.reminders.listPendingByClient, { clientId: ids.clientId });
+    const sameDay = [ids.b, ids.c].sort();
+    expect(list.map((r) => r._id)).toEqual([ids.a, ...sameDay, s.reminderId]);
+  });
 });

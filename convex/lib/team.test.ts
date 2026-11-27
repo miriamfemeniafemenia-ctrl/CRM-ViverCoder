@@ -189,6 +189,10 @@ const cases: Record<string, Case> = {
     kind: "mutation",
     run: (s) => s.ajena.mutation(api.reminders.remove, { id: s.reminderId }),
   },
+  "reminders.js:complete": {
+    kind: "mutation",
+    run: (s) => s.ajena.mutation(api.reminders.complete, { id: s.reminderId }),
+  },
   "reminders.js:listPendingByAssignee": {
     kind: "query",
     expected: [],

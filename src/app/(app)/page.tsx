@@ -37,8 +37,9 @@ const selectClass =
   "border-border-default text-text-primary bg-surface-card focus:border-primary-500 h-10 w-full rounded-md border px-3 text-sm outline-none";
 
 // Route por defecto ("/") — P1 según ARC-8. Lista de recordatorios pendientes
-// de quien está conectado, con lápiz (editar) y papelera (eliminar), mismo
-// patrón que P3 (ARC-70). Dos vistas (ARC-62): «Hoy» (vencidos y de hoy) y
+// de quien está conectado, con check (marcar como hecho, ARC-16/ARC-17), lápiz
+// (editar) y papelera (eliminar), y los vencidos destacados; mismo componente
+// que P3 (ARC-70). Dos vistas (ARC-62): «Hoy» (vencidos y de hoy) y
 // «Próximas» (futuros agrupados por fecha). Filtros (ARC-63): «Cliente» en las
 // dos pestañas y «Fecha de vencimiento» solo en «Hoy». La pestaña y los
 // filtros viven solo en memoria, al volver de editar se abre «Hoy» sin filtros.
@@ -50,6 +51,7 @@ export default function Page() {
   const reminders = useQuery(api.reminders.listPendingByAssignee);
   const currentUser = useQuery(api.users.current);
   const removeReminder = useMutation(api.reminders.remove);
+  const completeReminder = useMutation(api.reminders.complete);
   const today = useTodayMadrid();
   const [tab, setTab] = useState<Tab>("hoy");
   const [dueFilter, setDueFilter] = useState<DueFilter>("todas");
@@ -73,11 +75,15 @@ export default function Page() {
       <ReminderItem
         key={reminder._id}
         clientName={reminder.clientName}
-        clientHref={clientPageHref(reminder.clientId, { filtered: resolvedClient !== null })}
+        clientHref={clientPageHref(reminder.clientId, {
+          filtered: resolvedClient !== null,
+        })}
         date={reminder.date}
         note={reminder.note}
         assignedTo={currentUser?.name ?? "—"}
+        overdue={reminder.date < today}
         editHref={`/clientes/${reminder.clientId}/recordatorios/${reminder._id}/editar?from=p1`}
+        onComplete={() => completeReminder({ id: reminder._id })}
         onDelete={() => removeReminder({ id: reminder._id })}
       />
     );
@@ -92,7 +98,8 @@ export default function Page() {
   // Contador de la pestaña «Hoy» (ARC-65): total real de vencidos y de hoy, sin
   // filtros (el mismo valor que la insignia del menú). Se calcula con la lista
   // que P1 ya tiene cargada, sin una segunda suscripción.
-  const dueTotal = reminders === undefined ? undefined : countDueOrToday(reminders, today);
+  const dueTotal =
+    reminders === undefined ? undefined : countDueOrToday(reminders, today);
   const dueBadge = formatBadgeCount(dueTotal);
   const filtersActive =
     resolvedClient !== null || (tab === "hoy" && dueFilter !== "todas");
@@ -186,7 +193,9 @@ export default function Page() {
                 : "No tienes recordatorios para hoy ni vencidos."}
             </p>
           ) : (
-            <ul className="flex flex-col gap-3 text-sm">{todayVisible.map(renderItem)}</ul>
+            <ul className="flex flex-col gap-3 text-sm">
+              {todayVisible.map(renderItem)}
+            </ul>
           )
         ) : upcoming.length === 0 ? (
           <p className="text-text-secondary text-sm">

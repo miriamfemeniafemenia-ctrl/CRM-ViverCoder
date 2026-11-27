@@ -5,10 +5,10 @@ import { getTeamUser, requireTeamUser } from "./lib/team";
 import { isValidISODate, NOTE_MAX_LENGTH, todayISODateMadrid } from "./lib/validation";
 
 // D3 — Recordatorio. Alta desde la sub-pantalla "Nuevo recordatorio" (ARC-15)
-// con asignación a un usuario del equipo (ARC-60), y edición/borrado desde P3
-// (ARC-61) y P1 (ARC-70). El resto de F5 (marcar como hecho, filtros, pestaña
-// "Próximas"...) queda fuera de este alcance — ver ARC-62, ARC-63, ARC-65 (el contador
-// del menú: `countDueByAssignee`).
+// con asignación a un usuario del equipo (ARC-60), edición/borrado desde P3
+// (ARC-61) y P1 (ARC-70), y «marcar como hecho» desde las dos (`complete`,
+// ARC-16). Filtros y pestaña "Próximas" de P1: ARC-62, ARC-63; el contador del
+// menú: `countDueByAssignee` (ARC-65).
 //
 // Reglas de negocio:
 // - Visibilidad total entre los 3 miembros de la oficina: ni `clients.get` ni
@@ -27,6 +27,8 @@ import { isValidISODate, NOTE_MAX_LENGTH, todayISODateMadrid } from "./lib/valid
 //   por valor, no control de versión: un cambio A→B→A entre la carga y el
 //   guardado no se detecta (el resultado coincide con el original).
 // - `remove` es idempotente: borrar algo que ya no existe es éxito.
+// - `complete` es idempotente sobre un recordatorio ya atendido (conserva quién
+//   y cuándo lo marcó la primera vez), pero avisa si ya no existe.
 
 // Error con texto para el usuario: el cliente solo muestra los que llevan
 // `userMessage` (src/lib/reminders.ts); cualquier otro error, o un ConvexError
@@ -167,6 +169,33 @@ export const remove = mutation({
   },
 });
 
+// «Marcar como hecho» desde P3 y P1 (ARC-16): pasa a «atendido» y guarda quién
+// (la sesión activa, que puede no ser la persona asignada) y cuándo. Desaparece
+// solo de las listas y del contador, que ya filtran por «pendiente»; `get`,
+// `update` y `remove` ya lo rechazan.
+// - Ya atendido: éxito sin cambios. Si dos personas lo marcan a la vez, la
+//   segunda no ve un error y no se pisa la atribución de la primera.
+// - Ya no existe (otra sesión lo borró): se avisa, en vez de un éxito silencioso,
+//   porque quien lo marca cree estar cerrando algo.
+export const complete = mutation({
+  args: { id: v.id("reminders") },
+  handler: async (ctx, args) => {
+    const user = await requireTeamUser(ctx);
+    const reminder = await ctx.db.get(args.id);
+    if (!reminder) {
+      throw userError("El recordatorio ya no existe");
+    }
+    if (reminder.status !== "pendiente") {
+      return;
+    }
+    await ctx.db.patch(args.id, {
+      status: "atendido",
+      completedAt: Date.now(),
+      completedById: user._id,
+    });
+  },
+});
+
 // P1 — recordatorios pendientes de quien está conectado, con el nombre del
 // cliente. Sin filtrar por fecha (vencidos, de hoy y futuros): el corte por
 // "hoy" es ARC-63, la pestaña "Próximas" es ARC-62, ninguno de los dos entra
@@ -246,6 +275,10 @@ export const listPendingByClient = query({
       .query("reminders")
       .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
       .collect();
-    return reminders.filter((r) => r.status === "pendiente");
+    // Mismo orden que `listPendingByAssignee` (ARC-16): por fecha, el más
+    // antiguo primero, así los vencidos quedan arriba en P3.
+    return reminders
+      .filter((r) => r.status === "pendiente")
+      .sort((a, b) => a.date.localeCompare(b.date) || a._id.localeCompare(b._id));
   },
 });

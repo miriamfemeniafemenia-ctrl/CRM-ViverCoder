@@ -28,6 +28,7 @@ import {
   saleStatusBadgeClass,
   shouldShowClosedPrompt,
 } from "@/lib/sale-status";
+import { useTodayMadrid } from "@/lib/use-today-madrid";
 import { clientPageContext } from "@/lib/client-nav";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -45,11 +46,11 @@ const CHANNEL_LABEL: Record<string, string> = {
 // vacíos con guion, como teléfono y correo), la prioridad y el estado de venta
 // con cambio rápido (ARC-33; F7/ARC-18) — al pasar a «Cerrado», aviso de venta
 // cerrada (F8/ARC-19) —, el historial de interacciones (F4/ARC-14: la más
-// reciente primero, con «Anotar interacción» en su cabecera) y una lista mínima
-// de recordatorios pendientes (ARC-60, alta con asignación; ARC-61, editar y
-// eliminar). La sección completa de F5 (vencidos destacados, marcar como hecho)
-// es ARC-16; el resto de funciones de la ficha (F3, F10 — siniestros,
-// pólizas...) siguen pendientes: ARC-12, ARC-21, ARC-52, ARC-56.
+// reciente primero, con «Anotar interacción» en su cabecera) y los recordatorios
+// pendientes (F5: ARC-60, alta con asignación; ARC-61, editar y eliminar;
+// ARC-16, marcar como hecho y vencidos destacados, por fecha). El resto de
+// funciones de la ficha (F3, F10 — siniestros, pólizas...) siguen pendientes:
+// ARC-12, ARC-21, ARC-52, ARC-56.
 //
 // `?from=` dice desde dónde se abrió (regla de navegación ARC-8: «volver» lleva
 // al origen) y, desde P1 con un cliente elegido en el filtro, `?vista=recordatorios`
@@ -72,6 +73,8 @@ export default function Page({
   });
   const contacts = useQuery(api.contacts.listByClient, { clientId });
   const removeReminder = useMutation(api.reminders.remove);
+  const completeReminder = useMutation(api.reminders.complete);
+  const today = useTodayMadrid();
   const setPriority = useMutation(api.clients.setPriority);
   const setSaleStatus = useMutation(api.clients.setSaleStatus);
   const [badgeError, setBadgeError] = useState<string | null>(null);
@@ -283,7 +286,9 @@ export default function Page({
               date={reminder.date}
               note={reminder.note}
               assignedTo={userNameById.get(reminder.assignedToId) ?? "—"}
+              overdue={reminder.date < today}
               editHref={`/clientes/${clientId}/recordatorios/${reminder._id}/editar`}
+              onComplete={() => completeReminder({ id: reminder._id })}
               onDelete={() => removeReminder({ id: reminder._id })}
             />
           ))}
