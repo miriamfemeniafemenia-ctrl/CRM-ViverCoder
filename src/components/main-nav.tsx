@@ -16,7 +16,7 @@ import { api } from "../../convex/_generated/api";
 // las otras 2 cuando esas pantallas existan de verdad es solo ampliar
 // NAV_ITEMS.
 const NAV_ITEMS = [
-  { href: "/", label: "Mis tareas de hoy", icon: "tasks" },
+  { href: "/", label: "Tareas de hoy", icon: "tasks" },
   { href: "/clientes", label: "Clientes", icon: "clients" },
   { href: "/posibles-clientes", label: "Posibles clientes", icon: "leads" },
   { href: "/siniestros", label: "Siniestros", icon: "claims" },
@@ -93,7 +93,7 @@ export function MainNav() {
   const router = useRouter();
   const { signOut } = useAuthActions();
   const user = useQuery(api.users.current);
-  // Solo la entrada «Mis tareas de hoy» (href "/") lleva insignia: vencidos y de
+  // Solo la entrada «Tareas de hoy» (href "/") lleva insignia: vencidos y de
   // hoy del usuario conectado, recalculado al cambiar el día. Sin insignia visible
   // (cargando o 0) tampoco se añade texto para lectores de pantalla.
   const dueCount = useDueCount();
@@ -131,16 +131,21 @@ export function MainNav() {
           <span className="text-text-tertiary text-sm">CRM</span>
         </div>
 
-        <ul className="flex flex-1 items-stretch md:flex-col md:items-stretch md:gap-0.5 md:px-3">
+        {/* Barra inferior (ARC-79): cada pestaña parte del ancho de su nombre
+            (`flex-auto`) y, si no caben, encogen todas y el nombre se acorta con
+            «…» (`min-w-0` en la lista, `li` y enlace; `max-w-full` en el texto) en
+            vez de salirse de la pantalla. Sin `min-w-0` un elemento flex no puede
+            quedar más estrecho que su contenido. */}
+        <ul className="flex min-w-0 flex-1 items-stretch md:flex-col md:items-stretch md:gap-0.5 md:px-3">
           {NAV_ITEMS.map((item) => {
             const active = isActive(pathname, item.href);
             const badge = item.href === "/" ? dueBadge : null;
             return (
-              <li key={item.href} className="flex flex-1 md:flex-none">
+              <li key={item.href} className="flex min-w-0 flex-auto md:flex-none">
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`press-feedback flex min-h-[var(--tap-target-min)] flex-1 flex-col items-center justify-center gap-0.5 rounded-md px-2 text-center text-xs md:h-[38px] md:flex-row md:justify-start md:gap-3 md:px-3 md:text-sm ${
+                  className={`press-feedback flex min-h-[var(--tap-target-min)] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md px-1 text-center text-xs md:h-[38px] md:flex-row md:justify-start md:gap-3 md:px-3 md:text-sm ${
                     active
                       ? "text-primary-600 md:bg-primary-50 md:text-primary-700 font-semibold"
                       : "text-text-tertiary md:text-text-secondary font-medium"
@@ -150,7 +155,7 @@ export function MainNav() {
                     <NavIcon name={item.icon} active={active} />
                     {badge !== null && <CountBadge text={badge} />}
                   </span>
-                  <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                  <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
                     {item.label}
                   </span>
                   {badge !== null && dueCount !== undefined && (
